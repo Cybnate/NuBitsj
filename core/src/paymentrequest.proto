@@ -23,18 +23,18 @@
  */
 
 //
-// Simple Peercoin Payment Protocol messages
+// Simple Nubits Payment Protocol messages
 //
 // Use fields 100+ for extensions;
 // to avoid conflicts, register extensions at:
-// https://en.peercoin.it/wiki/Payment_Request
+// https://en.nubits.it/wiki/Payment_Request
 //
 
 package payments;
-option java_package = "org.peercoin.protocols.payments";
+option java_package = "org.nubits.protocols.payments";
 option java_outer_classname = "Protos";
 
-// Generalized form of "send payment to this/these peercoin addresses"
+// Generalized form of "send payment to this/these nubits addresses"
 message Output {
         optional uint64 amount = 1 [default = 0]; // amount is integer-number-of-satoshis
         required bytes script = 2; // usually one of the standard Script forms

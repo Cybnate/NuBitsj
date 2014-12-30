@@ -1,6 +1,6 @@
 package wallettemplate.controls;
 
-import com.matthewmitchell.peercoinj.uri.PeercoinURI;
+import com.matthewmitchell.nubitsj.uri.NubitsURI;
 import de.jensd.fx.fontawesome.AwesomeDude;
 import de.jensd.fx.fontawesome.AwesomeIcon;
 import javafx.beans.property.StringProperty;
@@ -36,23 +36,23 @@ import java.net.URI;
 //
 // From the java directory:
 //
-// javac -cp $HOME/.m2/repository/net/glxn/qrgen/1.3/qrgen-1.3.jar:$HOME/.m2/repository/de/jensd/fontawesomefx/8.0.0/fontawesomefx-8.0.0.jar:../../../target/classes:../../../../core/target/peercoinj-0.11-SNAPSHOT.jar -d ../../../target/classes/ -source 1.7 -target 1.7 wallettemplate/controls/ClickablePeercoinAddress.java
+// javac -cp $HOME/.m2/repository/net/glxn/qrgen/1.3/qrgen-1.3.jar:$HOME/.m2/repository/de/jensd/fontawesomefx/8.0.0/fontawesomefx-8.0.0.jar:../../../target/classes:../../../../core/target/nubitsj-0.11-SNAPSHOT.jar -d ../../../target/classes/ -source 1.7 -target 1.7 wallettemplate/controls/ClickableNubitsAddress.java
 
 
 /**
- * A custom control that implements a clickable, copyable Peercoin address. Clicking it opens a local wallet app. The
+ * A custom control that implements a clickable, copyable Nubits address. Clicking it opens a local wallet app. The
  * address looks like a blue hyperlink. Next to it there are two icons, one that copies to the clipboard and another
  * that shows a QRcode.
  */
-public class ClickablePeercoinAddress extends AnchorPane {
+public class ClickableNubitsAddress extends AnchorPane {
     @FXML protected Label addressLabel;
     @FXML protected ContextMenu addressMenu;
     @FXML protected Label copyWidget;
     @FXML protected Label qrCode;
 
-    public ClickablePeercoinAddress() {
+    public ClickableNubitsAddress() {
         try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("peercoin_address.fxml"));
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("nubits_address.fxml"));
             loader.setRoot(this);
             loader.setController(this);
             // The following line is supposed to help Scene Builder, although it doesn't seem to be needed for me.
@@ -70,7 +70,7 @@ public class ClickablePeercoinAddress extends AnchorPane {
     }
 
     public String uri() {
-        return PeercoinURI.convertToPeercoinURI(getAddress(), null, Main.APP_NAME, null);
+        return NubitsURI.convertToNubitsURI(getAddress(), null, Main.APP_NAME, null);
     }
 
     public String getAddress() {
@@ -133,7 +133,7 @@ public class ClickablePeercoinAddress extends AnchorPane {
         // non-centered on the screen. Finally fade/blur it in.
         Pane pane = new Pane(view);
         pane.setMaxSize(qrImage.getWidth(), qrImage.getHeight());
-        final Main.OverlayUI<ClickablePeercoinAddress> overlay = Main.instance.overlayUI(pane, this);
+        final Main.OverlayUI<ClickableNubitsAddress> overlay = Main.instance.overlayUI(pane, this);
         view.setOnMouseClicked(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent event) {

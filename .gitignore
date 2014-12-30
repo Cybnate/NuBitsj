@@ -4,3 +4,5 @@ target
 .settings
 .idea
 *.iml
+Session.vim
+*.sw*

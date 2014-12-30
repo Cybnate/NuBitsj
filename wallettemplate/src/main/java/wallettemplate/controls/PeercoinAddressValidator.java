@@ -1,8 +1,8 @@
 package wallettemplate.controls;
 
-import com.matthewmitchell.peercoinj.core.Address;
-import com.matthewmitchell.peercoinj.core.AddressFormatException;
-import com.matthewmitchell.peercoinj.core.NetworkParameters;
+import com.matthewmitchell.nubitsj.core.Address;
+import com.matthewmitchell.nubitsj.core.AddressFormatException;
+import com.matthewmitchell.nubitsj.core.NetworkParameters;
 import javafx.scene.Node;
 import javafx.scene.control.TextField;
 import wallettemplate.utils.TextFieldValidator;
@@ -11,11 +11,11 @@ import wallettemplate.utils.TextFieldValidator;
  * Given a text field, some network params and optionally some nodes, will make the text field an angry red colour
  * if the address is invalid for those params, and enable/disable the nodes.
  */
-public class PeercoinAddressValidator {
+public class NubitsAddressValidator {
     private NetworkParameters params;
     private Node[] nodes;
 
-    public PeercoinAddressValidator(NetworkParameters params, TextField field, Node... nodes) {
+    public NubitsAddressValidator(NetworkParameters params, TextField field, Node... nodes) {
         this.params = params;
         this.nodes = nodes;
 

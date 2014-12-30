@@ -21,18 +21,18 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.matthewmitchell</groupId>
-        <artifactId>peercoinj-parent</artifactId>
+        <artifactId>nubitsj-parent</artifactId>
         <version>0.11.3</version>
     </parent>
 
-    <artifactId>peercoinj</artifactId>
+    <artifactId>nubitsj</artifactId>
 
-    <name>peercoinj</name>
-    <description>A Java Peercoin library</description>
+    <name>nubitsj</name>
+    <description>A Java Nubits library</description>
 
     <packaging>jar</packaging>
 
-    <url>https://code.google.com/p/peercoinj</url>
+    <url>https://code.google.com/p/nubitsj</url>
 
     <licenses>
         <license>
@@ -45,8 +45,8 @@
     <!-- Dummy block to make Maven Central happy: authors list is in AUTHORS -->
     <developers>
         <developer>
-            <name>The peercoinj team</name>
-            <email>peercoinj@googlegroups.com</email>
+            <name>The nubitsj team</name>
+            <email>nubitsj@googlegroups.com</email>
         </developer>
     </developers>
 
@@ -125,7 +125,7 @@
                 </executions>
             </plugin>
 
-            <!-- Verify the dependency chain: see https://github.com/gary-rowe/PeercoinjEnforcerRules for
+            <!-- Verify the dependency chain: see https://github.com/gary-rowe/NubitsjEnforcerRules for
                more information on this.
             -->
             <plugin>
@@ -194,7 +194,7 @@
             <version>3.0</version>
             <scope>test</scope>
         </dependency>
-        <!-- peercoinj consumers are expected to provide their own SLF4J adapters
+        <!-- nubitsj consumers are expected to provide their own SLF4J adapters
              such as logback, slf4j-log4j12, slf4j-jcl and so on
              see http://www.slf4j.org/faq.html -->
         <dependency>

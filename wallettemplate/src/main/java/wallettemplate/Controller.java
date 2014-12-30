@@ -1,9 +1,9 @@
 package wallettemplate;
 
-import com.matthewmitchell.peercoinj.core.AbstractWalletEventListener;
-import com.matthewmitchell.peercoinj.core.DownloadListener;
-import com.matthewmitchell.peercoinj.core.Utils;
-import com.matthewmitchell.peercoinj.core.Wallet;
+import com.matthewmitchell.nubitsj.core.AbstractWalletEventListener;
+import com.matthewmitchell.nubitsj.core.DownloadListener;
+import com.matthewmitchell.nubitsj.core.Utils;
+import com.matthewmitchell.nubitsj.core.Wallet;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -13,12 +13,12 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
-import wallettemplate.controls.ClickablePeercoinAddress;
+import wallettemplate.controls.ClickableNubitsAddress;
 
 import java.math.BigInteger;
 import java.util.Date;
 
-import static wallettemplate.Main.peercoin;
+import static wallettemplate.Main.nubits;
 import static wallettemplate.utils.GuiUtils.checkGuiThread;
 
 /**
@@ -31,7 +31,7 @@ public class Controller {
     public HBox controlsBox;
     public Label balance;
     public Button sendMoneyOutBtn;
-    public ClickablePeercoinAddress addressControl;
+    public ClickableNubitsAddress addressControl;
 
     // Called by FXMLLoader.
     public void initialize() {
@@ -39,9 +39,9 @@ public class Controller {
         addressControl.setOpacity(0.0);
     }
 
-    public void onPeercoinSetup() {
-        peercoin.wallet().addEventListener(new BalanceUpdater());
-        addressControl.setAddress(peercoin.wallet().getKeys().get(0).toAddress(Main.params).toString());
+    public void onNubitsSetup() {
+        nubits.wallet().addEventListener(new BalanceUpdater());
+        addressControl.setAddress(nubits.wallet().getKeys().get(0).toAddress(Main.params).toString());
         refreshBalanceLabel();
     }
 
@@ -94,7 +94,7 @@ public class Controller {
     }
 
     public void refreshBalanceLabel() {
-        final BigInteger amount = peercoin.wallet().getBalance(Wallet.BalanceType.ESTIMATED);
-        balance.setText(Utils.peercoinValueToFriendlyString(amount));
+        final BigInteger amount = nubits.wallet().getBalance(Wallet.BalanceType.ESTIMATED);
+        balance.setText(Utils.nubitsValueToFriendlyString(amount));
     }
 }

@@ -1,6 +1,6 @@
 package wallettemplate;
 
-import com.matthewmitchell.peercoinj.core.*;
+import com.matthewmitchell.nubitsj.core.*;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import javafx.application.Platform;
@@ -8,7 +8,7 @@ import javafx.event.ActionEvent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
-import wallettemplate.controls.PeercoinAddressValidator;
+import wallettemplate.controls.NubitsAddressValidator;
 
 import static wallettemplate.utils.GuiUtils.crashAlert;
 import static wallettemplate.utils.GuiUtils.informationalAlert;
@@ -25,7 +25,7 @@ public class SendMoneyController {
 
     // Called by FXMLLoader
     public void initialize() {
-        new PeercoinAddressValidator(Main.params, address, sendBtn);
+        new NubitsAddressValidator(Main.params, address, sendBtn);
     }
 
     public void cancel(ActionEvent event) {
@@ -36,7 +36,7 @@ public class SendMoneyController {
         try {
             Address destination = new Address(Main.params, address.getText());
             Wallet.SendRequest req = Wallet.SendRequest.emptyWallet(destination);
-            sendResult = Main.peercoin.wallet().sendCoins(req);
+            sendResult = Main.nubits.wallet().sendCoins(req);
             Futures.addCallback(sendResult.broadcastComplete, new FutureCallback<Transaction>() {
                 @Override
                 public void onSuccess(Transaction result) {

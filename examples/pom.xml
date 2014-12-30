@@ -20,20 +20,20 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>com.matthewmitchell</groupId>
-        <artifactId>peercoinj-parent</artifactId>
+        <artifactId>nubitsj-parent</artifactId>
         <version>0.11.3</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>peercoinj-examples</artifactId>
+    <artifactId>nubitsj-examples</artifactId>
 
-    <name>peercoinj Examples</name>
-    <description>A collection of examples using the peercoinj library</description>
+    <name>nubitsj Examples</name>
+    <description>A collection of examples using the nubitsj library</description>
 
     <dependencies>
         <dependency>
             <groupId>com.matthewmitchell</groupId>
-            <artifactId>peercoinj</artifactId>
+            <artifactId>nubitsj</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
         <dependency>

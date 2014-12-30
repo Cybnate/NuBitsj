@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.matthewmitchell</groupId>
-  <artifactId>peercoinj-parent</artifactId>
+  <artifactId>nubitsj-parent</artifactId>
   <version>0.11.3</version>
   <packaging>pom</packaging>
 
@@ -20,14 +20,14 @@
   </parent>
 
   <scm>
-    <connection>scm:git:https://code.google.com/p/peercoinj/</connection>
-    <developerConnection>scm:git:https://code.google.com/p/peercoinj/</developerConnection>
-    <url>http://code.google.com/p/peercoinj/source/browse</url>
+    <connection>scm:git:https://code.google.com/p/nubitsj/</connection>
+    <developerConnection>scm:git:https://code.google.com/p/nubitsj/</developerConnection>
+    <url>http://code.google.com/p/nubitsj/source/browse</url>
   </scm>
 
-  <name>peercoinj Parent</name>
-  <description>Provides the common configuration for the PeercoinJ modules</description>
-  <url>http://code.google.com/p/peercoinj</url>
+  <name>nubitsj Parent</name>
+  <description>Provides the common configuration for the NubitsJ modules</description>
+  <url>http://code.google.com/p/nubitsj</url>
 
   <licenses>
     <license>
@@ -40,20 +40,20 @@
 
   <issueManagement>
     <system>Google Code</system>
-    <url>http://code.google.com/p/peercoinj/issues/list</url>
+    <url>http://code.google.com/p/nubitsj/issues/list</url>
   </issueManagement>
 
   <mailingLists>
     <mailingList>
-      <name>peercoinj Google Group</name>
-      <post>https://groups.google.com/forum/#!forum/peercoinj</post>
+      <name>nubitsj Google Group</name>
+      <post>https://groups.google.com/forum/#!forum/nubitsj</post>
     </mailingList>
   </mailingLists>
 
   <repositories>
     <repository>
-        <id>peercoinj-distribution</id>
-        <url>https://distribution.peercoinj.googlecode.com/git/releases</url>
+        <id>nubitsj-distribution</id>
+        <url>https://distribution.nubitsj.googlecode.com/git/releases</url>
     </repository>
   </repositories>
 
@@ -81,7 +81,7 @@
         <artifactId>slf4j-api</artifactId>
         <version>1.7.5</version>
       </dependency>
-      <!-- peercoinj consumers are expected to provide their own SLF4J adapters
+      <!-- nubitsj consumers are expected to provide their own SLF4J adapters
     such as logback, slf4j-log4j12, slf4j-jcl and so on
     see http://www.slf4j.org/faq.html -->
       <dependency>

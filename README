@@ -19,7 +19,3 @@ checkpointing, so the initial chain sync will be pretty slow. You can make an ap
 does the initial sync much faster by including a checkpoints file; see the documentation for
 more info on this.
 
-Now you are ready to follow the tutorial:
-
-   https://nubitsj.github.io/getting-started
-

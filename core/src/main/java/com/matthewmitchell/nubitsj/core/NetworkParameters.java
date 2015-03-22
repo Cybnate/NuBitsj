@@ -1,5 +1,6 @@
 /**
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,18 +22,15 @@ import com.matthewmitchell.nubitsj.script.Script;
 import com.matthewmitchell.nubitsj.script.ScriptOpCodes;
 import com.google.common.base.Objects;
 
-import org.spongycastle.util.encoders.Hex;
-
 import javax.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Serializable;
 import java.math.BigInteger;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import static com.google.common.base.Preconditions.checkState;
-import static com.matthewmitchell.nubitsj.core.Utils.COIN;
+import static com.matthewmitchell.nubitsj.core.Coin.*;
 
 /**
  * <p>NetworkParameters contains the data needed for working with an instantiation of a Nubits chain.</p>
@@ -57,7 +55,6 @@ public abstract class NetworkParameters implements Serializable {
     public static final String PAYMENT_PROTOCOL_ID_MAINNET = "main";
 
     protected Block genesisBlock;
-    protected BigInteger proofOfWorkLimit;
     protected int port;
     protected long packetMagic;
     protected int addressHeader;
@@ -76,7 +73,6 @@ public abstract class NetworkParameters implements Serializable {
      * The depth of blocks required for a coinbase transaction to be spendable.
      */
     protected int spendableCoinbaseDepth;
-    protected int subsidyDecreaseBlockCount;
     
     protected int[] acceptableAddressCodes;
     protected String[] dnsSeeds;
@@ -94,11 +90,11 @@ public abstract class NetworkParameters implements Serializable {
             // A script containing the difficulty bits and the following message:
             //
             //   "Why Argentina's default feels like American bullying: Don Pittis"
-            byte[] bytes = Hex.decode
-                    ("04ffff001d020f274c4c323031342d30382d30313a2057687920417267656e74696e6127732064656661756c74206665656c73206c696b6520416d65726963616e2062756c6c79696e673a20446f6e20506974746973");
+            byte[] bytes = Utils.HEX.decode
+                ("04ffff001d020f274c4c323031342d30382d30313a2057687920417267656e74696e6127732064656661756c74206665656c73206c696b6520416d65726963616e2062756c6c79696e673a20446f6e20506974746973");
             t.addInput(new TransactionInput(n, t, bytes));
             ByteArrayOutputStream scriptPubKeyBytes = new ByteArrayOutputStream();
-            t.addOutput(new TransactionOutput(n, t, Utils.toNanoCoins(0, 0), scriptPubKeyBytes.toByteArray()));
+            t.addOutput(new TransactionOutput(n, t, ZERO, scriptPubKeyBytes.toByteArray()));
         } catch (Exception e) {
             // Cannot happen.
             throw new RuntimeException(e);
@@ -121,8 +117,9 @@ public abstract class NetworkParameters implements Serializable {
      * mined upon and thus will be quickly re-orged out as long as the majority are enforcing the rule.
      */
     public static final int BIP16_ENFORCE_TIME = 1333238400;
-    
-    public static final BigInteger MAX_MONEY = new BigInteger("200000000000", 10).multiply(COIN);
+
+    public static final long MAX_COINS = 200000000000L;
+    public static final Coin MAX_MONEY = COIN.multiply(MAX_COINS);
 
     /** Alias for MainNetParams.get(), use that instead */
     @Deprecated
@@ -146,10 +143,11 @@ public abstract class NetworkParameters implements Serializable {
     public abstract String getPaymentProtocolId();
 
     @Override
-    public boolean equals(Object other) {
-        if (!(other instanceof NetworkParameters)) return false;
-        NetworkParameters o = (NetworkParameters) other;
-        return o.getId().equals(getId());
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        NetworkParameters other = (NetworkParameters) o;
+        return getId().equals(other.getId());
     }
 
     @Override
@@ -199,10 +197,6 @@ public abstract class NetworkParameters implements Serializable {
         return checkpointHash != null;
     }
 
-    public int getSubsidyDecreaseBlockCount() {
-        return subsidyDecreaseBlockCount;
-    }
-
     /** Returns DNS names that when resolved, give IP addresses of active peers. */
     public String[] getDnsSeeds() {
         return dnsSeeds;
@@ -216,7 +210,8 @@ public abstract class NetworkParameters implements Serializable {
      * prevBlockHash pointers in the block headers.</p>
      *
      * <p>The genesis blocks for both test and prod networks contain the timestamp of when they were created,
-     * and a message in the coinbase transaction. It says, <i>"Why Argentina's default feels like American bullying: Don Pittis"</i>.</p>
+     * and a message in the coinbase transaction. It says, <i>"Why Argentina's default feels like American
+     * bullying: Don Pittis"</i>.</p>
      */
     public Block getGenesisBlock() {
         return genesisBlock;
@@ -283,8 +278,4 @@ public abstract class NetworkParameters implements Serializable {
         return interval;
     }
 
-    /** What the easiest allowable proof of work should be. */
-    public BigInteger getProofOfWorkLimit() {
-        return proofOfWorkLimit;
-    }
 }

@@ -6,3 +6,4 @@ target
 *.iml
 Session.vim
 *.sw*
+tags

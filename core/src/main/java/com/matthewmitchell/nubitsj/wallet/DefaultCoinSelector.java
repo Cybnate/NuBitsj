@@ -1,22 +1,25 @@
 package com.matthewmitchell.nubitsj.wallet;
 
+import com.matthewmitchell.nubitsj.core.Coin;
 import com.matthewmitchell.nubitsj.core.NetworkParameters;
 import com.matthewmitchell.nubitsj.core.Transaction;
 import com.matthewmitchell.nubitsj.core.TransactionConfidence;
 import com.matthewmitchell.nubitsj.core.TransactionOutput;
+import com.matthewmitchell.nubitsj.params.UnitTestParams;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.math.BigInteger;
 import java.util.*;
 
 /**
- * This class implements a {@link com.matthewmitchell.nubitsj.wallet.CoinSelector} which attempts to get the highest priority
+ * This class implements a {@link CoinSelector} which attempts to get the highest priority
  * possible. This means that the transaction is the most likely to get confirmed. Note that this means we may end up
  * "spending" more priority than would be required to get the transaction we are creating confirmed.
  */
 public class DefaultCoinSelector implements CoinSelector {
-    public CoinSelection select(BigInteger biTarget, LinkedList<TransactionOutput> candidates) {
-        long target = biTarget.longValue();
+    @Override
+    public CoinSelection select(Coin biTarget, List<TransactionOutput> candidates) {
+        long target = biTarget.value;
         HashSet<TransactionOutput> selected = new HashSet<TransactionOutput>();
         // Sort the inputs by age*value so we get the highest "coindays" spent.
         // TODO: Consider changing the wallets internal format to track just outputs and keep them ordered.
@@ -34,15 +37,16 @@ public class DefaultCoinSelector implements CoinSelector {
             // Only pick chain-included transactions, or transactions that are ours and pending.
             if (!shouldSelect(output.getParentTransaction())) continue;
             selected.add(output);
-            total += output.getValue().longValue();
+            total += output.getValue().value;
         }
         // Total may be lower than target here, if the given candidates were insufficient to create to requested
         // transaction.
-        return new CoinSelection(BigInteger.valueOf(total), selected);
+        return new CoinSelection(Coin.valueOf(total), selected);
     }
 
     @VisibleForTesting static void sortOutputs(ArrayList<TransactionOutput> outputs) {
         Collections.sort(outputs, new Comparator<TransactionOutput>() {
+            @Override
             public int compare(TransactionOutput a, TransactionOutput b) {
                 int depth1 = 0;
                 int depth2 = 0;
@@ -52,10 +56,10 @@ public class DefaultCoinSelector implements CoinSelector {
                     depth1 = conf1.getDepthInBlocks();
                 if (conf2.getConfidenceType() == TransactionConfidence.ConfidenceType.BUILDING)
                     depth2 = conf2.getDepthInBlocks();
-                BigInteger aValue = a.getValue();
-                BigInteger bValue = b.getValue();
-                BigInteger aCoinDepth = aValue.multiply(BigInteger.valueOf(depth1));
-                BigInteger bCoinDepth = bValue.multiply(BigInteger.valueOf(depth2));
+                Coin aValue = a.getValue();
+                Coin bValue = b.getValue();
+                BigInteger aCoinDepth = BigInteger.valueOf(aValue.value).multiply(BigInteger.valueOf(depth1));
+                BigInteger bCoinDepth = BigInteger.valueOf(bValue.value).multiply(BigInteger.valueOf(depth2));
                 int c1 = bCoinDepth.compareTo(aCoinDepth);
                 if (c1 != 0) return c1;
                 // The "coin*days" destroyed are equal, sort by value alone to get the lowest transaction size.
@@ -82,8 +86,8 @@ public class DefaultCoinSelector implements CoinSelector {
 
                type.equals(TransactionConfidence.ConfidenceType.PENDING) &&
                confidence.getSource().equals(TransactionConfidence.Source.SELF) &&
-               // In regtest mode we expect to have only one peer, so we won't see transactions propagate.
+               // In unittest mode we expect to have only one peer, so we won't see transactions propagate.
                // TODO: The value 1 below dates from a time when transactions we broadcast *to* were counted, set to 0
-               (confidence.numBroadcastPeers() > 1);
+               (confidence.numBroadcastPeers() > 1 || tx.getParams() == UnitTestParams.get());
     }
 }

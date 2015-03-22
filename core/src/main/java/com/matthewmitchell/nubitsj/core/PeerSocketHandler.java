@@ -48,7 +48,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
     // If we close() before we know our writeTarget, set this to true to call writeTarget.closeConnection() right away.
     private boolean closePending = false;
     // writeTarget will be thread-safe, and may call into PeerGroup, which calls us, so we should call it unlocked
-    @VisibleForTesting MessageWriteTarget writeTarget = null;
+    @VisibleForTesting protected MessageWriteTarget writeTarget = null;
 
     // The ByteBuffers passed to us from the writeTarget are static in size, and usually smaller than some messages we
     // will receive. For SPV clients, this should be rare (ie we're mostly dealing with small transactions), but for
@@ -75,6 +75,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
      * TODO: Maybe use something other than the unchecked NotYetConnectedException here
      */
     public void sendMessage(Message message) throws NotYetConnectedException {
+	log.info("SENT -> {}", message.toString());
         lock.lock();
         try {
             if (writeTarget == null)
@@ -102,7 +103,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
                 closePending = true;
                 if (peerGroup != null) {
                 	// Handle peer death
-                	peerGroup.handlePeerDeath((Peer) this);
+                	peerGroup.handlePeerDeath((Peer) this, null);
                 }
                 return;
             }

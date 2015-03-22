@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Matt Corallo.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +18,7 @@
 package com.matthewmitchell.nubitsj.core;
 
 import com.matthewmitchell.nubitsj.script.Script;
+import com.matthewmitchell.nubitsj.script.Script.VerifyFlag;
 import com.matthewmitchell.nubitsj.store.BlockStoreException;
 import com.matthewmitchell.nubitsj.store.FullPrunedBlockStore;
 import com.matthewmitchell.nubitsj.store.ValidHashStore;
@@ -25,11 +27,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -97,6 +100,11 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
     }
 
     @Override
+    protected void rollbackBlockStore(int height) throws BlockStoreException {
+        throw new BlockStoreException("Unsupported");
+    }
+
+    @Override
     protected boolean shouldVerifyTransactions() {
         return true;
     }
@@ -121,10 +129,10 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
     private static class Verifier implements Callable<VerificationException> {
         final Transaction tx;
         final List<Script> prevOutScripts;
-        final boolean enforcePayToScriptHash;
+        final Set<VerifyFlag> verifyFlags;
 
-        public Verifier(final Transaction tx, final List<Script> prevOutScripts, final boolean enforcePayToScriptHash) {
-            this.tx = tx; this.prevOutScripts = prevOutScripts; this.enforcePayToScriptHash = enforcePayToScriptHash;
+        public Verifier(final Transaction tx, final List<Script> prevOutScripts, final Set<VerifyFlag> verifyFlags) {
+            this.tx = tx; this.prevOutScripts = prevOutScripts; this.verifyFlags = verifyFlags;
         }
 
         @Nullable
@@ -133,7 +141,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
             try{
                 ListIterator<Script> prevOutIt = prevOutScripts.listIterator();
                 for (int index = 0; index < tx.getInputs().size(); index++) {
-                    tx.getInputs().get(index).getScriptSig().correctlySpends(tx, index, prevOutIt.next(), enforcePayToScriptHash);
+                    tx.getInputs().get(index).getScriptSig().correctlySpends(tx, index, prevOutIt.next(), verifyFlags);
                 }
             } catch (VerificationException e) {
                 return e;
@@ -156,8 +164,10 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
         LinkedList<StoredTransactionOutput> txOutsSpent = new LinkedList<StoredTransactionOutput>();
         LinkedList<StoredTransactionOutput> txOutsCreated = new LinkedList<StoredTransactionOutput>();  
         long sigOps = 0;
-        final boolean enforcePayToScriptHash = block.getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME;
-        
+        final Set<VerifyFlag> verifyFlags = EnumSet.noneOf(VerifyFlag.class);
+        if (block.getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME)
+            verifyFlags.add(VerifyFlag.P2SH);
+
         if (scriptVerificationExecutor.isShutdown())
             scriptVerificationExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         
@@ -173,16 +183,14 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     // being added twice (bug) or the block is a BIP30 violator.
                     if (blockStore.hasUnspentOutputs(hash, tx.getOutputs().size()))
                         throw new VerificationException("Block failed BIP30 test!");
-                    if (enforcePayToScriptHash) // We already check non-BIP16 sigops in Block.verifyTransactions(true)
+                    if (verifyFlags.contains(VerifyFlag.P2SH)) // We already check non-BIP16 sigops in Block.verifyTransactions(true)
                         sigOps += tx.getSigOpCount();
                 }
             }
-            BigInteger totalFees = BigInteger.ZERO;
-            BigInteger coinbaseValue = null;
             for (final Transaction tx : block.transactions) {
                 boolean isCoinBase = tx.isCoinBase();
-                BigInteger valueIn = BigInteger.ZERO;
-                BigInteger valueOut = BigInteger.ZERO;
+                Coin valueIn = Coin.ZERO;
+                Coin valueOut = Coin.ZERO;
                 final List<Script> prevOutScripts = new LinkedList<Script>();
                 if (!isCoinBase) {
                     // For each input of the transaction remove the corresponding output from the set of unspent
@@ -200,7 +208,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                             throw new VerificationException("Tried to spend coinbase at depth " + (height - prevOut.getHeight()));
                         // TODO: Check we're not spending the genesis transaction here. Satoshis code won't allow it.
                         valueIn = valueIn.add(prevOut.getValue());
-                        if (enforcePayToScriptHash) {
+                        if (verifyFlags.contains(VerifyFlag.P2SH)) {
                             if (new Script(prevOut.getScriptBytes()).isPayToScriptHash())
                                 sigOps += Script.getP2SHSigOpCount(in.getScriptBytes());
                             if (sigOps > Block.MAX_BLOCK_SIGOPS)
@@ -226,25 +234,16 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                 }
                 // All values were already checked for being non-negative (as it is verified in Transaction.verify())
                 // but we check again here just for defence in depth. Transactions with zero output value are OK.
-                if (valueOut.compareTo(BigInteger.ZERO) < 0 || valueOut.compareTo(params.MAX_MONEY) > 0)
+                if (valueOut.signum() < 0 || valueOut.compareTo(NetworkParameters.MAX_MONEY) > 0)
                     throw new VerificationException("Transaction output value out of range");
-                if (isCoinBase) {
-                    coinbaseValue = valueOut;
-                } else {
-                    if (valueIn.compareTo(valueOut) < 0 || valueIn.compareTo(params.MAX_MONEY) > 0)
-                        throw new VerificationException("Transaction input value out of range");
-                    totalFees = totalFees.add(valueIn.subtract(valueOut));
-                }
                 
                 if (!isCoinBase && runScripts) {
                     // Because correctlySpends modifies transactions, this must come after we are done with tx
-                    FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifier(tx, prevOutScripts, enforcePayToScriptHash));
+                    FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifier(tx, prevOutScripts, verifyFlags));
                     scriptVerificationExecutor.execute(future);
                     listScriptVerificationResults.add(future);
                 }
             }
-            if (totalFees.compareTo(params.MAX_MONEY) > 0 || block.getBlockInflation(height).add(totalFees).compareTo(coinbaseValue) < 0)
-                throw new VerificationException("Transaction fees out of range");
             for (Future<VerificationException> future : listScriptVerificationResults) {
                 VerificationException e;
                 try {
@@ -294,7 +293,9 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                 LinkedList<StoredTransactionOutput> txOutsSpent = new LinkedList<StoredTransactionOutput>();
                 LinkedList<StoredTransactionOutput> txOutsCreated = new LinkedList<StoredTransactionOutput>();
                 long sigOps = 0;
-                final boolean enforcePayToScriptHash = newBlock.getHeader().getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME;
+                final Set<VerifyFlag> verifyFlags = EnumSet.noneOf(VerifyFlag.class);
+                if (newBlock.getHeader().getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME)
+                    verifyFlags.add(VerifyFlag.P2SH);
                 if (!params.isCheckpoint(newBlock.getHeight())) {
                     for(Transaction tx : transactions) {
                         Sha256Hash hash = tx.getHash();
@@ -302,16 +303,14 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                             throw new VerificationException("Block failed BIP30 test!");
                     }
                 }
-                BigInteger totalFees = BigInteger.ZERO;
-                BigInteger coinbaseValue = null;
-                
+
                 if (scriptVerificationExecutor.isShutdown())
                     scriptVerificationExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
                 List<Future<VerificationException>> listScriptVerificationResults = new ArrayList<Future<VerificationException>>(transactions.size());
                 for(final Transaction tx : transactions) {
                     boolean isCoinBase = tx.isCoinBase();
-                    BigInteger valueIn = BigInteger.ZERO;
-                    BigInteger valueOut = BigInteger.ZERO;
+                    Coin valueIn = Coin.ZERO;
+                    Coin valueOut = Coin.ZERO;
                     final List<Script> prevOutScripts = new LinkedList<Script>();
                     if (!isCoinBase) {
                         for (int index = 0; index < tx.getInputs().size(); index++) {
@@ -323,7 +322,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                             if (newBlock.getHeight() - prevOut.getHeight() < params.getSpendableCoinbaseDepth())
                                 throw new VerificationException("Tried to spend coinbase at depth " + (newBlock.getHeight() - prevOut.getHeight()));
                             valueIn = valueIn.add(prevOut.getValue());
-                            if (enforcePayToScriptHash) {
+                            if (verifyFlags.contains(VerifyFlag.P2SH)) {
                                 Script script = new Script(prevOut.getScriptBytes());
                                 if (script.isPayToScriptHash())
                                     sigOps += Script.getP2SHSigOpCount(in.getScriptBytes());
@@ -348,26 +347,16 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     }
                     // All values were already checked for being non-negative (as it is verified in Transaction.verify())
                     // but we check again here just for defence in depth. Transactions with zero output value are OK.
-                    if (valueOut.compareTo(BigInteger.ZERO) < 0 || valueOut.compareTo(params.MAX_MONEY) > 0)
+                    if (valueOut.signum() < 0 || valueOut.compareTo(NetworkParameters.MAX_MONEY) > 0)
                         throw new VerificationException("Transaction output value out of range");
-                    if (isCoinBase) {
-                        coinbaseValue = valueOut;
-                    } else {
-                        if (valueIn.compareTo(valueOut) < 0 || valueIn.compareTo(params.MAX_MONEY) > 0)
-                            throw new VerificationException("Transaction input value out of range");
-                        totalFees = totalFees.add(valueIn.subtract(valueOut));
-                    }
                     
                     if (!isCoinBase) {
                         // Because correctlySpends modifies transactions, this must come after we are done with tx
-                        FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifier(tx, prevOutScripts, enforcePayToScriptHash));
+                        FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifier(tx, prevOutScripts, verifyFlags));
                         scriptVerificationExecutor.execute(future);
                         listScriptVerificationResults.add(future);
                     }
                 }
-                if (totalFees.compareTo(params.MAX_MONEY) > 0 ||
-                        newBlock.getHeader().getBlockInflation(newBlock.getHeight()).add(totalFees).compareTo(coinbaseValue) < 0)
-                    throw new VerificationException("Transaction fees out of range");
                 txOutChanges = new TransactionOutputChanges(txOutsCreated, txOutsSpent);
                 for (Future<VerificationException> future : listScriptVerificationResults) {
                     VerificationException e;

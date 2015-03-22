@@ -3,8 +3,8 @@ package com.matthewmitchell.nubitsj.jni;
 import com.matthewmitchell.nubitsj.core.*;
 import com.matthewmitchell.nubitsj.protocols.channels.PaymentChannelCloseException;
 import com.matthewmitchell.nubitsj.protocols.channels.ServerConnectionEventHandler;
-
-import java.math.BigInteger;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.protobuf.ByteString;
 
 /**
  * An event listener that relays events to a native C++ object. A pointer to that object is stored in
@@ -18,7 +18,7 @@ public class NativePaymentChannelServerConnectionEventHandler extends ServerConn
     public native void channelOpen(Sha256Hash channelId);
 
     @Override
-    public native void paymentIncrease(BigInteger by, BigInteger to);
+    public native ListenableFuture<ByteString> paymentIncrease(Coin by, Coin to, ByteString info);
 
     @Override
     public native void channelClosed(PaymentChannelCloseException.CloseReason reason);

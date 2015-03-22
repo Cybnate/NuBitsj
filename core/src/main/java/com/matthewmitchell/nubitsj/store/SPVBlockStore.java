@@ -161,6 +161,7 @@ public class SPVBlockStore implements BlockStore {
         return RECORD_SIZE * numHeaders + FILE_PROLOGUE_BYTES /* extra kilobyte for stuff */;
     }
 
+    @Override
     public void put(StoredBlock block) throws BlockStoreException {
         final MappedByteBuffer buffer = this.buffer;
         if (buffer == null) throw new BlockStoreException("Store closed");
@@ -182,11 +183,11 @@ public class SPVBlockStore implements BlockStore {
         } finally { lock.unlock(); }
     }
 
+    @Override
     @Nullable
     public StoredBlock get(Sha256Hash hash) throws BlockStoreException {
         final MappedByteBuffer buffer = this.buffer;
         if (buffer == null) throw new BlockStoreException("Store closed");
-        if (hash.equals(Sha256Hash.ZERO_HASH)) return null;
 
         lock.lock();
         try {
@@ -229,6 +230,7 @@ public class SPVBlockStore implements BlockStore {
 
     protected StoredBlock lastChainHead = null;
 
+    @Override
     public StoredBlock getChainHead() throws BlockStoreException {
         final MappedByteBuffer buffer = this.buffer;
         if (buffer == null) throw new BlockStoreException("Store closed");
@@ -249,6 +251,7 @@ public class SPVBlockStore implements BlockStore {
         } finally { lock.unlock(); }
     }
 
+    @Override
     public void setChainHead(StoredBlock chainHead) throws BlockStoreException {
         final MappedByteBuffer buffer = this.buffer;
         if (buffer == null) throw new BlockStoreException("Store closed");
@@ -262,6 +265,7 @@ public class SPVBlockStore implements BlockStore {
         } finally { lock.unlock(); }
     }
 
+    @Override
     public void close() throws BlockStoreException {
         try {
             buffer.force();

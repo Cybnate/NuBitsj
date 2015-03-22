@@ -17,34 +17,32 @@
 
 package com.matthewmitchell.nubitsj.store;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.BufferedOutputStream;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-
-import java.lang.reflect.Array;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-
-import org.omg.CORBA_2_3.portable.OutputStream;
-import org.spongycastle.util.encoders.Hex;
 
 import com.google.common.base.Objects;
+import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.io.Files;
 import com.google.common.primitives.Bytes;
 import com.matthewmitchell.nubitsj.core.AbstractBlockChain;
 import com.matthewmitchell.nubitsj.core.Sha256Hash;
 import com.matthewmitchell.nubitsj.core.StoredBlock;
 import com.matthewmitchell.nubitsj.core.Utils;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Array;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import org.omg.CORBA_2_3.portable.OutputStream;
+import org.spongycastle.util.encoders.Hex;
 
 public class ValidHashStore {
 	
@@ -144,23 +142,23 @@ public class ValidHashStore {
 		return hash;
 		
 	}
-	
+
 	public boolean isValidHash(Sha256Hash hash, AbstractBlockChain blockChain, boolean waitForServer) throws IOException {
 		
 		// Get 16 bytes only
 		byte[] cmpHash = new byte[16];
 		System.arraycopy(Utils.reverseBytes(hash.getBytes()), 0, cmpHash, 0, 16);
-
+	    
 		// First check the existing hashes
 		if (isInValidHashes(cmpHash))
 			return true;
-
+		
 		// Nope. We need to ensure the valid hashes is synchronised with the server
-
+		
 		// Create POST data locator
-
+		
 		byte[] locator = new byte[3200];
-
+		
 		BlockStore store = checkNotNull(blockChain).getBlockStore();
 		StoredBlock chainHead = blockChain.getChainHead();
 
@@ -187,8 +185,8 @@ public class ValidHashStore {
 		HttpURLConnection connection = (HttpURLConnection) VALID_HASHES_URL.openConnection();
 		connection.setUseCaches(false);
 		connection.setInstanceFollowRedirects(false);
-		connection.setConnectTimeout(20000);
-		connection.setReadTimeout(20000);
+		connection.setConnectTimeout(30000);
+		connection.setReadTimeout(30000);
 		connection.setRequestMethod("POST");
 		connection.setRequestProperty("Content-Type", "application/octet-stream");
 		connection.setRequestProperty( "Accept-Encoding", "" ); 
@@ -198,36 +196,37 @@ public class ValidHashStore {
 		os.flush();
 		os.close();
 		connection.connect();
-		
-		try {
-			final int responseCode = connection.getResponseCode();
-			if (responseCode == HttpURLConnection.HTTP_OK) {
 
-				InputStream is = new BufferedInputStream(connection.getInputStream(), 1024);
+		try {		
 
-				// We are going to replace the valid hashes with the new ones
+		    final int responseCode = connection.getResponseCode();
+		    if (responseCode == HttpURLConnection.HTTP_OK) {
 
-				BufferedOutputStream file = getOutputStream();
-				validHashesArray.clear();
-				index = 0;
-				initialFind = true;
+			InputStream is = new BufferedInputStream(connection.getInputStream());
 
-				// Write new hashes. Ensure a limit of 50,000 hashes.
+			// We are going to replace the valid hashes with the new ones
 
-				byte[] b;
+			BufferedOutputStream file = getOutputStream();
+			validHashesArray.clear();
+			index = 0;
+			initialFind = true;
+
+			// Write new hashes. Ensure a limit of 50,000 hashes.
+
+			byte[] b;
 			
-				for (int x = 0; (b = getHashFromInputStream(is)) != null && x < 50000; x++)
-					writeHash(b, file);
+			for (int x = 0; (b = getHashFromInputStream(is)) != null && x < 50000; x++)
+				writeHash(b, file);
 
-				file.flush();
-				file.close();
+			file.flush();
+			file.close();
 
-			} else throw new IOException("Bad response code from server when downloading hashes");
-			
+		    } else throw new IOException("Bad response code from server when downloading hashes");
+
 		}finally{
-			connection.disconnect();
+		    connection.disconnect();
 		}
-		
+
 		// Lastly check valid hashes again
 		return isInValidHashes(cmpHash);
 		

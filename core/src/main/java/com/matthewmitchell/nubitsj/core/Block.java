@@ -745,11 +745,7 @@ public class Block extends Message {
         // The first transaction in a block must always be a coinbase transaction.
         if (!transactions.get(0).isCoinBase())
             throw new VerificationException("First tx is not coinbase");
-        // The rest must not be.
-        for (int i = 1; i < transactions.size(); i++) {
-            if (transactions.get(i).isCoinBase())
-                throw new VerificationException("TX " + i + " is coinbase when it should not be.");
-        }
+        // NuBits: There can be a second coinbase for NuBit grants
     }
 
     /**

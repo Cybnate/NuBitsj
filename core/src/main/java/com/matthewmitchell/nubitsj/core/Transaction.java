@@ -1248,7 +1248,7 @@ public class Transaction extends ChildMessage implements Serializable {
         }
 
         if (isCoinBase()) {
-            if (inputs.get(0).getScriptBytes().length < 2 || inputs.get(0).getScriptBytes().length > 100)
+            if (inputs.get(0).getScriptBytes().length > 100)
                 throw new VerificationException.CoinbaseScriptSizeOutOfRange();
         } else {
             for (TransactionInput input : inputs)

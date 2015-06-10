@@ -25,7 +25,7 @@ import java.math.BigDecimal;
 import static com.google.common.base.Preconditions.checkArgument;
 
 /**
- * Represents a monetary Bitcoin value. This class is immutable.
+ * Represents a monetary NuBits value. This class is immutable.
  */
 public final class Coin implements Monetary, Comparable<Coin>, Serializable {
 
@@ -36,7 +36,7 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
     public static final int SMALLEST_UNIT_EXPONENT = 4;
 
     /**
-     * The number of satoshis equal to one nubits.
+     * The numzber of satoshis equal to one nubits.
      */
     private static final long COIN_VALUE = LongMath.pow(10, SMALLEST_UNIT_EXPONENT);
 
@@ -84,7 +84,7 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
 
     private Coin(final long satoshis) {
         checkArgument(-MAX_SATOSHIS <= satoshis && satoshis <= MAX_SATOSHIS,
-            "%s satoshis exceeds maximum possible quantity of Nubits.", satoshis);
+                "%s satoshis exceeds maximum possible quantity of Nubits.", satoshis);
         this.value = satoshis;
     }
 
@@ -127,6 +127,13 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
      */
     public static Coin parseCoin(final String str) {
         return Coin.valueOf(new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).toBigIntegerExact().longValue());
+    }
+
+    /**
+     * Similar to parseCoin, but allows for inexact representations to be rounded
+     */
+    public static Coin parseCoinInexact(final String str) {
+        return Coin.valueOf(new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).setScale(0, BigDecimal.ROUND_HALF_UP).toBigInteger().longValue());
     }
 
     public Coin add(final Coin value) {
@@ -271,5 +278,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
             return 0;
         return this.value > other.value ? 1 : -1;
     }
+
 }
 

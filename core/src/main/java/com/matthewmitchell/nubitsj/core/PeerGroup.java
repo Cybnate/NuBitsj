@@ -82,7 +82,7 @@ import static com.google.common.base.Preconditions.*;
  */
 public class PeerGroup extends AbstractExecutionThreadService implements TransactionBroadcaster {
     private static final Logger log = LoggerFactory.getLogger(PeerGroup.class);
-    private static final int DEFAULT_CONNECTIONS = 4;
+    private static final int DEFAULT_CONNECTIONS = 12;
     private static final int TOR_TIMEOUT_SECONDS = 60;
 
     protected final ReentrantLock lock = Threading.lock("peergroup");
@@ -286,7 +286,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     private FilterMerger bloomFilterMerger;
 
     /** The default timeout between when a connection attempt begins and version message exchange completes */
-    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 8000;
+    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 12000;
     private volatile int vConnectTimeoutMillis = DEFAULT_CONNECT_TIMEOUT_MILLIS;
 
     /**
@@ -535,7 +535,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         ver.appendToSubVer(name, version, comments);
         setVersionMessage(ver);
     }
-    
+
     // Updates the relayTxesBeforeFilter flag of ver
     private void updateVersionMessageRelayTxesBeforeFilter(VersionMessage ver) {
         // We will provide the remote node with a bloom filter (ie they shouldn't relay yet)
@@ -666,10 +666,10 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
      * been configured, or set to zero, then it's set to the default at this point.
      */
     public void addPeerDiscovery(PeerDiscovery peerDiscovery) {
-		addPeerDiscovery(peerDiscovery, false);
-	}
+        addPeerDiscovery(peerDiscovery, false);
+    }
 
-	public void addPeerDiscovery(PeerDiscovery peerDiscovery, boolean backup) {
+    public void addPeerDiscovery(PeerDiscovery peerDiscovery, boolean backup) {
         lock.lock();
         try {
             if (getMaxConnections() == 0)
@@ -681,21 +681,18 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     }
 
     protected void discoverPeers() throws PeerDiscoveryException {
-		discoverPeers(false);
-	}
+        discoverPeers(false);
+    }
 
-	protected void discoverPeers(boolean backup) throws PeerDiscoveryException {
+    protected void discoverPeers(boolean backup) throws PeerDiscoveryException {
 
         checkState(lock.isHeldByCurrentThread());
 
-		CopyOnWriteArraySet<PeerDiscovery> discoverers = backup ? backupDiscoverers : peerDiscoverers;
+        CopyOnWriteArraySet<PeerDiscovery> discoverers = backup ? backupDiscoverers : peerDiscoverers;
 
         if (discoverers.isEmpty())
             throw new PeerDiscoveryException("No " + (backup ? "backup " : "") + "peer discoverers registered");
 
-        if (backup)
-        	backups.clear();
-        
         long start = System.currentTimeMillis();
 
         final List<PeerAddress> addressList = Lists.newLinkedList();
@@ -710,9 +707,9 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
                 lock.lock();
             }
             for (InetSocketAddress address : addresses) {
-            	if (address == null)
-            		break;
-            	addressList.add(new PeerAddress(address));
+                if (address == null)
+                    break;
+                addressList.add(new PeerAddress(address));
             }
         }
 
@@ -723,16 +720,10 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         } finally {
             lock.unlock();
         }
-        
-        if (backup) {
-        	if (backups.size() != 0)
-        		backupStart = new Random().nextInt(backups.size());
-        	backupCount = 0;
-        }
 
         log.info("{}eer discovery took {}msec and returned {} items", backup ? "Backup p" : "P",
                 System.currentTimeMillis() - start, addressList.size());
-        
+
     }
 
     @Override
@@ -806,24 +797,39 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         long retryTime = 0;
         lock.lock();
         try {
-        	boolean tryNormal = true;
-        	
-			if (groupBackoff.isMaxmimum() && peers.size() == 0) {
-				
-				if (backupCount == backups.size())
-					discoverPeers(true);
-				tryNormal = backups.size() == 0;
-				
-			}
-			
-			if (! tryNormal) {
-				
-				addr = backups.get((backupStart + backupCount++) % backups.size());
-				retryTime = 0;
-				backupConnect.add(addr);
-				
-			}else{
-	
+            boolean tryNormal = true;
+
+            if (groupBackoff.isMaxmimum() && peers.size() < getMinBroadcastConnections()) {
+
+                if (backupCount == 0) {
+                    // Starting backup connections, therefore discover peers
+                    try {
+                        discoverPeers(true);
+                    } catch (PeerDiscoveryException ex) {
+                        // Swallow
+                    }
+                    if (backups.size() != 0)
+                        backupStart = new Random().nextInt(backups.size());
+                }else if (backupCount == backups.size()) {
+                    // Reset backup
+                    backupCount = 0;
+                    backups.clear();
+                    // Use normal again
+                    groupBackoff.trackSuccess();
+                }
+
+                tryNormal = backups.size() == 0;
+
+            }
+
+            if (! tryNormal) {
+
+                addr = backups.get((backupStart + backupCount++) % backups.size());
+                retryTime = 0;
+                backupConnect.add(addr);
+
+            }else{
+
                 if (useLocalhostPeerWhenPossible && maybeCheckForLocalhostPeer()) {
                     log.info("Localhost peer detected, trying to use it instead of P2P discovery");
                     maxConnections = 0;
@@ -831,22 +837,22 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
                     return;
                 }
 
-	            if (!haveReadyInactivePeer(nowMillis)) {
-	            	Utils.sleep(100); // Prevent too many requests.
-	                discoverPeers();
-	                nowMillis = Utils.currentTimeMillis();
-	            }
-	            if (inactives.size() == 0) {
-	                log.debug("Peer discovery didn't provide us any more peers, not trying to build new connection.");
-	                return;
-	            }
-	            
+                if (!haveReadyInactivePeer(nowMillis)) {
+                    Utils.sleep(100); // Prevent too many requests.
+                    discoverPeers();
+                    nowMillis = Utils.currentTimeMillis();
+                }
+                if (inactives.size() == 0) {
+                    log.debug("Peer discovery didn't provide us any more peers, not trying to build new connection.");
+                    return;
+                }
+
                 while (addr == null || (ipv6Unreachable && addr.getAddr() instanceof Inet6Address))
                     addr = inactives.poll();
-	            ExponentialBackoff backoff = backoffMap.get(addr);
-	            retryTime = (backoff != null) ? backoff.getRetryTime() : 0;
-			}
-            
+                ExponentialBackoff backoff = backoffMap.get(addr);
+                retryTime = (backoff != null) ? backoff.getRetryTime() : 0;
+            }
+
         } finally {
             // discoverPeers might throw an exception if something goes wrong: we then hit this path with addr == null.
             retryTime = Math.max(retryTime, groupBackoff.getRetryTime());
@@ -1047,7 +1053,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             lock.unlock();
         }
     }
-    
+
     /**
      * <p>Sets the false positive rate of bloom filters given to peers. The default is {@link #DEFAULT_BLOOM_FILTER_FP_RATE}.</p>
      *
@@ -1202,8 +1208,8 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             groupBackoff.trackSuccess();
             ExponentialBackoff backoff = backoffMap.get(peer.getAddress());
             if (backoff != null)
-            	// Backup peer, no backoff
-            	backoff.trackSuccess();
+                // Backup peer, no backoff
+                backoff.trackSuccess();
 
             // Sets up the newly connected peer so it can do everything it needs to.
             log.info("{}: New peer", peer);

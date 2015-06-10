@@ -21,7 +21,9 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.math.LongMath.checkedMultiply;
 import static com.google.common.math.LongMath.checkedPow;
 import static com.google.common.math.LongMath.divide;
-
+import com.matthewmitchell.nubitsj.core.Coin;
+import com.matthewmitchell.nubitsj.core.Monetary;
+import com.matthewmitchell.nubitsj.shapeshift.ShapeShiftMonetary;
 import java.math.RoundingMode;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
@@ -29,9 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-
-import com.matthewmitchell.nubitsj.core.Coin;
-import com.matthewmitchell.nubitsj.core.Monetary;
 
 /**
  * <p>
@@ -334,36 +333,36 @@ public final class MonetaryFormat {
         long decimals = satoshis % shiftDivisor;
 
         // formatting
-        
+
         StringBuilder str;
-        
+
         // Only do decimals if we need any.
-        
+
         int decLen = monetary.smallestUnitExponent() - shift;
-        
+
         if (decLen > 0) {
-        	
-	        String decimalsStr = String.format(Locale.US, "%0" + decLen + "d", decimals);
-	        str = new StringBuilder(decimalsStr);
-	        while (str.length() > minDecimals && str.charAt(str.length() - 1) == '0')
-	            str.setLength(str.length() - 1); // trim trailing zero
-	        int i = minDecimals;
-	        if (decimalGroups != null) {
-	            for (int group : decimalGroups) {
-	                if (str.length() > i && str.length() < i + group) {
-	                    while (str.length() < i + group)
-	                        str.append('0');
-	                    break;
-	                }
-	                i += group;
-	            }
-	        }
-	        if (str.length() > 0)
-	            str.insert(0, decimalMark);
-	        
+
+            String decimalsStr = String.format(Locale.US, "%0" + decLen + "d", decimals);
+            str = new StringBuilder(decimalsStr);
+            while (str.length() > minDecimals && str.charAt(str.length() - 1) == '0')
+                str.setLength(str.length() - 1); // trim trailing zero
+            int i = minDecimals;
+            if (decimalGroups != null) {
+                for (int group : decimalGroups) {
+                    if (str.length() > i && str.length() < i + group) {
+                        while (str.length() < i + group)
+                            str.append('0');
+                        break;
+                    }
+                    i += group;
+                }
+            }
+            if (str.length() > 0)
+                str.insert(0, decimalMark);
+
         }else
-        	str = new StringBuilder();
-        
+            str = new StringBuilder();
+
         str.insert(0, numbers);
         if (monetary.getValue() < 0)
             str.insert(0, negativeSign);
@@ -409,6 +408,19 @@ public final class MonetaryFormat {
      */
     public Fiat parseFiat(String currencyCode, String str) throws NumberFormatException {
         return Fiat.valueOf(currencyCode, parseValue(str, Fiat.SMALLEST_UNIT_EXPONENT));
+    }
+
+    /**
+     * Gets a {@link com.matthewmitchell.nubitsj.shapeshift.ShapeShiftMonetary} for a string formatted with the MonetaryFormat
+     *
+     * @params amount The string for the Shapeshift coin amount
+     * @params smallestUnitExponent The number of decimal places for the coin
+     *
+     * @throws NumberFormatException
+     *             if the string cannot be parsed for some reason
+     */
+    public ShapeShiftMonetary parseShapeShiftCoin(String amount, int smallestUnitExponent) throws NumberFormatException {
+        return new ShapeShiftMonetary(parseValue(amount, smallestUnitExponent), smallestUnitExponent);
     }
 
     private long parseValue(String str, int smallestUnitExponent) {

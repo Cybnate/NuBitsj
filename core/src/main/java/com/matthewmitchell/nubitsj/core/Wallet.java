@@ -3098,7 +3098,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
          */
         public static SendRequest to(Address destination, Coin value) {
             SendRequest req = new SendRequest();
-            final NetworkParameters parameters = destination.getParameters();
+            final NetworkParameters parameters = destination.getSelectedParameters();
             checkNotNull(parameters, "Address is for an unknown network");
             req.tx = new Transaction(parameters);
             req.tx.addOutput(value, destination);
@@ -3129,7 +3129,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
 
         public static SendRequest emptyWallet(Address destination) {
             SendRequest req = new SendRequest();
-            final NetworkParameters parameters = destination.getParameters();
+            final NetworkParameters parameters = destination.getSelectedParameters();
             checkNotNull(parameters, "Address is for an unknown network");
             req.tx = new Transaction(parameters);
             req.tx.addOutput(Coin.ZERO, destination);

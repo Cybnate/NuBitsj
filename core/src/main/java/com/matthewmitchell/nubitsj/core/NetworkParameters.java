@@ -73,7 +73,7 @@ public abstract class NetworkParameters implements Serializable {
      * The depth of blocks required for a coinbase transaction to be spendable.
      */
     protected int spendableCoinbaseDepth;
-    
+
     protected int[] acceptableAddressCodes;
     protected String[] dnsSeeds;
     protected Map<Integer, Sha256Hash> checkpoints = new HashMap<Integer, Sha256Hash>();
@@ -100,17 +100,17 @@ public abstract class NetworkParameters implements Serializable {
             throw new RuntimeException(e);
         }
         genesisBlock.addTransaction(t);
-        
+
         String merkleHash = genesisBlock.getMerkleRoot().toString();
         checkState(merkleHash.equals("3e6c2608685f1d66d8fe9cb798400ec16aec1574b7ad9a7a92a65c7fcea2d32a"), merkleHash);
-        
+
         return genesisBlock;
     }
 
     public static final int TARGET_TIMESPAN = 7 * 24 * 60 * 60;  // 1 day.
     public static final int TARGET_SPACING = 10 * 60;  // 10 minutes per block.
     public static final int INTERVAL = 1; // Every block
-    
+
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
      * network rules in a soft-forking manner, that is, blocks that don't follow the rules are accepted but not
@@ -179,6 +179,13 @@ public abstract class NetworkParameters implements Serializable {
 
     public int getSpendableCoinbaseDepth() {
         return spendableCoinbaseDepth;
+    }
+
+    /**
+     * Returns true if the NetworkParameters is for a ShapeShift coin. ie. not NuBits
+     */
+    public boolean isShapeShift() {
+        return false;
     }
 
     /**
@@ -276,6 +283,13 @@ public abstract class NetworkParameters implements Serializable {
     /** How many blocks pass between difficulty adjustment periods. Nubits standardises this to be 2015. */
     public int getInterval() {
         return interval;
+    }
+
+    /**
+     * Used to parse a coin string into a Monetary for this network.
+     */
+    public Monetary parseCoin(String str) {
+        return Coin.parseCoin(str);
     }
 
 }

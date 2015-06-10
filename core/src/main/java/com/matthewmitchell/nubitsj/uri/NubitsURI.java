@@ -18,15 +18,12 @@
 
 package com.matthewmitchell.nubitsj.uri;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import com.matthewmitchell.nubitsj.core.Address;
 import com.matthewmitchell.nubitsj.core.AddressFormatException;
 import com.matthewmitchell.nubitsj.core.Coin;
+import com.matthewmitchell.nubitsj.core.Monetary;
 import com.matthewmitchell.nubitsj.core.NetworkParameters;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
-
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -37,8 +34,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-
-import static com.google.common.base.Preconditions.checkNotNull;
+import javax.annotation.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>Provides a standard implementation of a Nubits URI with support for the following:</p>
@@ -113,15 +111,17 @@ public class NubitsURI {
     }
 
     /**
-     * Constructs a new object by trying to parse the input as a valid Nubits URI.
+     * Given a particular prefix, parse the input string to create a NubitsURI object
      *
-     * @param params The network parameters that determine which network the URI is from, or null if you don't have
-     *               any expectation about what network the URI is for and wish to check yourself.
-     * @param input The raw URI data to be parsed (see class comments for accepted formats)
+     * @params params The network parameters that determine which network the URI is from, or null if you don't have
+     *                any expectation about what network the URI is for and wish to check yourself.
+     * @params input The raw URI data to be parsed (see class comments for accepted formats)
+     * @params prefix The coin prefix to check for
      *
-     * @throws NubitsURIParseException If the input fails Nubits URI syntax and semantic checks.
+     * @throws NubitsURIParseException If the input fails Nubits URI syntax and semantic checks for the specified
+     * network.
      */
-    public NubitsURI(@Nullable NetworkParameters params, String input) throws NubitsURIParseException {
+    public NubitsURI(NetworkParameters params, String input, String prefix) throws NubitsURIParseException  {
         checkNotNull(input);
         log.debug("Attempting to parse '{}' for {}", input, params == null ? "any" : params.getId());
 
@@ -133,27 +133,20 @@ public class NubitsURI {
             throw new NubitsURIParseException("Bad URI syntax", e);
         }
 
-        // Allow nu
-        if (input.startsWith("nu")) {
-            StringBuilder sb = new StringBuilder(input);
-            sb.setCharAt(0, 'N');
-            input = sb.toString();
-        }
-
         // URI is formed as  nubits:<address>?<query parameters>
         // blockchain.info generates URIs of non-BIP compliant form nubits://address?....
         // We support both until Ben fixes his code.
-        
+
         // Remove the nubits scheme.
         // (Note: getSchemeSpecificPart() is not used as it unescapes the label and parse then fails.
         // For instance with : nubits:129mVqKUmJ9uwPxKJBnNdABbuaaNfho4Ha?amount=0.06&label=Tom%20%26%20Jerry
         // the & (%26) in Tom and Jerry gets interpreted as a separator and the label then gets parsed
         // as 'Tom ' instead of 'Tom & Jerry')
         String schemeSpecificPart;
-        if (input.startsWith(Nubits_SCHEME + "://")) {
-            schemeSpecificPart = input.substring((Nubits_SCHEME + "://").length());
-        } else if (input.startsWith(Nubits_SCHEME + ":")) {
-            schemeSpecificPart = input.substring((Nubits_SCHEME + ":").length());
+        if (input.startsWith(prefix + "://")) {
+            schemeSpecificPart = input.substring((prefix + "://").length());
+        } else if (input.startsWith(prefix + ":")) {
+            schemeSpecificPart = input.substring((prefix + ":").length());
         } else {
             throw new NubitsURIParseException("Unsupported URI scheme: " + uri.getScheme());
         }
@@ -161,7 +154,7 @@ public class NubitsURI {
         // Split off the address from the rest of the query parameters.
         String[] addressSplitTokens = schemeSpecificPart.split("\\?", 2);
         if (addressSplitTokens.length == 0)
-            throw new NubitsURIParseException("No data found after the Nu: prefix");
+            throw new NubitsURIParseException("No data found after the " + prefix + ": prefix");
         String addressToken = addressSplitTokens[0];  // may be empty!
 
         String[] nameValuePairTokens;
@@ -191,6 +184,33 @@ public class NubitsURI {
         }
     }
 
+    // Needed due to stupid Java restriction of including statements before a call to "this"
+    static private String prepareNubitsURIInput(String input) {
+
+        // Allow nu
+        if (input.startsWith("nu")) {
+            StringBuilder sb = new StringBuilder(input);
+            sb.setCharAt(0, 'N');
+            input = sb.toString();
+        }
+
+        return input;
+
+    }
+
+    /**
+     * Constructs a new object by trying to parse the input as a valid Nubits URI.
+     *
+     * @param params The network parameters that determine which network the URI is from, or null if you don't have
+     *               any expectation about what network the URI is for and wish to check yourself.
+     * @param input The raw URI data to be parsed (see class comments for accepted formats)
+     *
+     * @throws NubitsURIParseException If the input fails Nubits URI syntax and semantic checks.
+     */
+    public NubitsURI(@Nullable NetworkParameters params, String input) throws NubitsURIParseException {
+        this(params, prepareNubitsURIInput(input), Nubits_SCHEME);
+    }
+
     /**
      * @param params The network parameters or null
      * @param nameValuePairTokens The tokens representing the name value pairs (assumed to be
@@ -213,7 +233,7 @@ public class NubitsURI {
             if (FIELD_AMOUNT.equals(nameToken)) {
                 // Decode the amount (contains an optional decimal component to 4dp).
                 try {
-                    Coin amount = Coin.parseCoin(valueToken);
+                    Monetary amount = params.parseCoin(valueToken);
                     if (amount.signum() < 0)
                         throw new ArithmeticException("Negative coins specified");
                     putWithValidation(FIELD_AMOUNT, amount);
@@ -271,8 +291,8 @@ public class NubitsURI {
      * @return The amount name encoded using a pure integer value based at
      *         10,000,000 units is 1 Nbt. May be null if no amount is specified
      */
-    public Coin getAmount() {
-        return (Coin) parameterMap.get(FIELD_AMOUNT);
+    public Monetary getAmount() {
+        return (Monetary) parameterMap.get(FIELD_AMOUNT);
     }
 
     /**
@@ -353,23 +373,23 @@ public class NubitsURI {
      * @return A String containing the Nubits URI
      */
     public static String convertToNubitsURI(String address, @Nullable Coin amount, @Nullable String label,
-                                             @Nullable String message) {
+            @Nullable String message) {
         checkNotNull(address);
         if (amount != null && amount.signum() < 0) {
             throw new IllegalArgumentException("Coin must be positive");
         }
-        
+
         StringBuilder builder = new StringBuilder();
         builder.append(Nubits_SCHEME).append(":").append(address);
-        
+
         boolean questionMarkHasBeenOutput = false;
-        
+
         if (amount != null) {
             builder.append(QUESTION_MARK_SEPARATOR).append(FIELD_AMOUNT).append("=");
             builder.append(amount.toPlainString());
             questionMarkHasBeenOutput = true;
         }
-        
+
         if (label != null && !"".equals(label)) {
             if (questionMarkHasBeenOutput) {
                 builder.append(AMPERSAND_SEPARATOR);
@@ -379,7 +399,7 @@ public class NubitsURI {
             }
             builder.append(FIELD_LABEL).append("=").append(encodeURLString(label));
         }
-        
+
         if (message != null && !"".equals(message)) {
             if (questionMarkHasBeenOutput) {
                 builder.append(AMPERSAND_SEPARATOR);
@@ -388,7 +408,7 @@ public class NubitsURI {
             }
             builder.append(FIELD_MESSAGE).append("=").append(encodeURLString(message));
         }
-        
+
         return builder.toString();
     }
 

@@ -112,9 +112,9 @@ public class PeerDBDiscovery implements PeerDiscovery {
 
         synchronized boolean isBad() {
             return (lastConnected == 0 && triedSinceLastConnection >= 3) || // Tried 3 times and never connected
-                    (lastConnected < Utils.currentTimeMillis() - TimeUnit.DAYS.toMillis(5) &&
-                            triedSinceLastConnection >= 5) || // Tried 5 times since last connection, which was > 5 days ago
-                    (vTimeLastHeard < Utils.currentTimeMillis() - TimeUnit.DAYS.toMillis(14)); // Haven't heard of node in 14 days
+                    (lastConnected < Utils.currentTimeMillis() - TimeUnit.DAYS.toMillis(1) &&
+                            triedSinceLastConnection >= 3) || // Tried 3 times since last connection, which was > 1 day ago
+                    (vTimeLastHeard < Utils.currentTimeMillis() - TimeUnit.DAYS.toMillis(10)); // Haven't heard of node in 10 days
         }
 
         @Override public synchronized int hashCode() { return (int) (address.toSocketAddress().hashCode() ^ rotatingRandomKey); }

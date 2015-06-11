@@ -170,8 +170,8 @@ public class Address extends VersionedChecksummedBytes {
      * @throws AddressFormatException if the given address doesn't parse or the checksum is invalid
      * @throws WrongNetworkException if the given address is valid but for a different chain (eg testnet vs prodnet)
      */
-    public Address(@Nonnull NetworkParameters params, String address) throws AddressFormatException {
-        this(Arrays.asList(params), address);
+    public Address(@Nullable NetworkParameters params, String address) throws AddressFormatException {
+        this(params == null ? null : Arrays.asList(params), address);
     }
 
     /** The (big endian) 20 byte hash that is the core of a Nubits address. */

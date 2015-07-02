@@ -24,6 +24,7 @@ import com.matthewmitchell.nubitsj.core.AddressFormatException;
 import com.matthewmitchell.nubitsj.core.Coin;
 import com.matthewmitchell.nubitsj.core.Monetary;
 import com.matthewmitchell.nubitsj.core.NetworkParameters;
+import com.matthewmitchell.nubitsj.params.MainNetParams;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -101,13 +102,13 @@ public class NubitsURI {
     private final Map<String, Object> parameterMap = new LinkedHashMap<String, Object>();
 
     /**
-     * Constructs a new NubitsURI from the given string. Can be for any network.
+     * Constructs a new NubitsURI from the given string for the NuBits main network.
      *
      * @param uri The raw URI data to be parsed (see class comments for accepted formats)
      * @throws NubitsURIParseException if the URI is not syntactically or semantically valid.
      */
     public NubitsURI(String uri) throws NubitsURIParseException {
-        this(null, uri);
+        this(MainNetParams.get(), uri);
     }
 
     /**
@@ -201,13 +202,12 @@ public class NubitsURI {
     /**
      * Constructs a new object by trying to parse the input as a valid Nubits URI.
      *
-     * @param params The network parameters that determine which network the URI is from, or null if you don't have
-     *               any expectation about what network the URI is for and wish to check yourself.
+     * @param params The network parameters that determine which network the URI is from.
      * @param input The raw URI data to be parsed (see class comments for accepted formats)
      *
      * @throws NubitsURIParseException If the input fails Nubits URI syntax and semantic checks.
      */
-    public NubitsURI(@Nullable NetworkParameters params, String input) throws NubitsURIParseException {
+    public NubitsURI(NetworkParameters params, String input) throws NubitsURIParseException {
         this(params, prepareNubitsURIInput(input), Nubits_SCHEME);
     }
 
@@ -249,7 +249,7 @@ public class NubitsURI {
                 } else {
                     // Known fields and unknown parameters that are optional.
                     try {
-                        if (valueToken.length() > 0)
+                        if (valueToken.length() > 0 && (!params.isShapeShift() || !nameToken.equals(FIELD_PAYMENT_REQUEST_URL)))
                             putWithValidation(nameToken, URLDecoder.decode(valueToken, "UTF-8"));
                     } catch (UnsupportedEncodingException e) {
                         // Unreachable.

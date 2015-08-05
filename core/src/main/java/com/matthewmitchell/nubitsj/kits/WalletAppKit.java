@@ -46,6 +46,8 @@ import java.util.concurrent.TimeoutException;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 /**
  * <p>Utility class that wraps the boilerplate needed to set up a new SPV nubitsj app. Instantiate it with a directory
@@ -93,6 +95,15 @@ public class WalletAppKit extends AbstractIdleService {
     protected String userAgent, version;
     protected WalletProtobufSerializer.WalletFactory walletFactory;
     @Nullable protected DeterministicSeed restoreFromSeed;
+
+    private static URL SERVER;
+
+    static {
+        try {
+            SERVER = new URL("https://svr1.nubitsexplorer.nu/q/getvalidhashes");
+        } catch (MalformedURLException ex) {
+        }
+    }
 
     public WalletAppKit(NetworkParameters params, File directory, String filePrefix) {
         this.params = checkNotNull(params);
@@ -249,8 +260,25 @@ public class WalletAppKit extends AbstractIdleService {
             boolean shouldReplayWallet = (vWalletFile.exists() && !chainFileExists) || restoreFromSeed != null;
             vWallet = createOrLoadWallet(shouldReplayWallet);
 
-            validHashStore = new ValidHashStore(validHashFile);
-            
+            validHashStore = new ValidHashStore(validHashFile, new ValidHashStore.TrustedServersInterface() {
+
+                @Override
+                public URL getNext(boolean didFail) {
+                    return SERVER;
+                }
+
+                @Override
+                public boolean invalidated() {
+                    return false;
+                }
+
+                @Override
+                public void markSuccess(boolean success) {
+                    // Do nothing
+                }
+
+            });
+
             vStore = new SPVBlockStore(params, chainFile);
             if ((!chainFileExists || restoreFromSeed != null) && checkpoints != null) {
                 // Initialize the chain file with a checkpoint to speed up first-run sync.
@@ -397,12 +425,12 @@ public class WalletAppKit extends AbstractIdleService {
      */
     private void completeExtensionInitiations(TransactionBroadcaster transactionBroadcaster) {
         StoredPaymentChannelClientStates clientStoredChannels = (StoredPaymentChannelClientStates)
-                vWallet.getExtensions().get(StoredPaymentChannelClientStates.class.getName());
+            vWallet.getExtensions().get(StoredPaymentChannelClientStates.class.getName());
         if(clientStoredChannels != null) {
             clientStoredChannels.setTransactionBroadcaster(transactionBroadcaster);
         }
         StoredPaymentChannelServerStates serverStoredChannels = (StoredPaymentChannelServerStates)
-                vWallet.getExtensions().get(StoredPaymentChannelServerStates.class.getName());
+            vWallet.getExtensions().get(StoredPaymentChannelServerStates.class.getName());
         if(serverStoredChannels != null) {
             serverStoredChannels.setTransactionBroadcaster(transactionBroadcaster);
         }

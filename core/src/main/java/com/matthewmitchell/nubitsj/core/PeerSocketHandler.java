@@ -75,7 +75,6 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
      * TODO: Maybe use something other than the unchecked NotYetConnectedException here
      */
     public void sendMessage(Message message) throws NotYetConnectedException {
-	log.info("SENT -> {}", message.toString());
         lock.lock();
         try {
             if (writeTarget == null)
@@ -102,8 +101,8 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
             if (writeTarget == null) {
                 closePending = true;
                 if (peerGroup != null) {
-                	// Handle peer death
-                	peerGroup.handlePeerDeath((Peer) this, null);
+                    // Handle peer death
+                    peerGroup.handlePeerDeath((Peer) this, null);
                 }
                 return;
             }

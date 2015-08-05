@@ -133,6 +133,7 @@ public class BIP38PrivateKey extends VersionedChecksummedBytes {
             byte[] aeskey = Arrays.copyOfRange(derived, 32, 64);
 
             SecretKeySpec keyspec = new SecretKeySpec(aeskey, "AES");
+			DRMWorkaround.maybeDisableExportControls();
             Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, keyspec);
 

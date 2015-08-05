@@ -97,9 +97,6 @@ public class AsyncHttpClient {
 					Reader reader = new InputStreamReader(is, Charsets.UTF_8);
 					String result = CharStreams.toString(reader);
 					
-					final org.slf4j.Logger log = LoggerFactory.getLogger(ShapeShiftComm.class);
-					log.info(url + ": " + postData + " -> " + result);
-					
 					cbks.onSuccess(result);
 
 				} catch (IOException ex) {

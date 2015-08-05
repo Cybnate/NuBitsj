@@ -17,11 +17,6 @@
 package com.matthewmitchell.nubitsj.core;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkArgument;
-
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import com.matthewmitchell.nubitsj.params.Networks;
 import com.matthewmitchell.nubitsj.script.Script;
@@ -29,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-import javax.annotation.Nonnull;
 
 /**
  * <p>A Nubits address looks like 1MsScoe2fTJoq4ZPdQgqyhgWeoNamYPevy and is derived from an elliptic curve public key
@@ -53,7 +47,7 @@ public class Address extends VersionedChecksummedBytes {
     /**
      * Construct an address from a list of parameters, the address version, and the hash160 form. Example:<p>
      *
-     * <pre>new Address(NetworkParameters.prodNet(), NetworkParameters.getAddressHeader(), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
+     * <pre>new Address(Arrays.asList(NetworkParameters.prodNet()), NetworkParameters.getAddressHeader(), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
      */
     public Address(List<NetworkParameters> paramsList, int version, byte[] hash160) throws WrongNetworkException {
 
@@ -112,7 +106,7 @@ public class Address extends VersionedChecksummedBytes {
     /**
      * Construct an address from a list of parameters and the standard "human readable" form. Example:<p>
      *
-     * <pre>new Address(NetworkParameters.prodNet(), "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL");</pre><p>
+     * <pre>new Address(Arrays.asList(NetworkParameters.prodNet()), "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL");</pre><p>
      *
      * @param paramsList The expected NetworkParameters or null if you don't want validation.
      * @param address The textual form of the address, such as "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL"
@@ -150,7 +144,7 @@ public class Address extends VersionedChecksummedBytes {
     /**
      * Construct an address from a standard "human readable" form. Example:<p>
      *
-     * <pre>new Address(NetworkParameters.prodNet(), "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL");</pre><p>
+     * <pre>new Address("17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL");</pre><p>
      *
      * @param address The textual form of the address, such as "17kzeh4N8g49GFvdDzSf8PjaPfyoD1MndL"
      * @throws AddressFormatException if the given address doesn't parse or the checksum is invalid

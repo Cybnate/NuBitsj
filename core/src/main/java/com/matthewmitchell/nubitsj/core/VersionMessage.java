@@ -73,7 +73,7 @@ public class VersionMessage extends Message {
     public boolean relayTxesBeforeFilter;
 
     /** The version of this library release, as a string. */
-    public static final String NubitsJ_VERSION = "0.14.0";
+    public static final String NubitsJ_VERSION = "0.14.1";
     /** The value that is prepended to the subVer field of this application. */
     public static final String LIBRARY_SUBVER = "/nubitsj:" + NubitsJ_VERSION + "/";
 
@@ -302,6 +302,7 @@ public class VersionMessage extends Message {
      * is available and the memory pool of the remote peer will be queried when the downloadData property is true.
      */
     public boolean isBloomFilteringSupported() {
-        return clientVersion >= FilteredBlock.MIN_PROTOCOL_VERSION;
+		// NuBits: Never support bloom filtering
+		return false;
     }
 }

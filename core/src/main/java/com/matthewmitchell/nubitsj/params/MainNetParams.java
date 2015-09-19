@@ -50,6 +50,9 @@ public class MainNetParams extends NetworkParameters {
         checkpoints.put(160000, new Sha256Hash("da14f6ce38bddb33af0f2f448a8d3f7b99b16157a06db7a3706b8d37bb9d2b42"));
         checkpoints.put(200000, new Sha256Hash("1fa6966628f46a08cbfd1cb0422bdaa67003c8f0b8e141a8e00f7fc1e9354d59"));
 
+        dnsSeeds = new String[] {
+            "nuseed.coinerella.com",
+        };
     }
 
     private static MainNetParams instance;

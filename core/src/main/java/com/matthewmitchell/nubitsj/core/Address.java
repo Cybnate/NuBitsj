@@ -91,7 +91,7 @@ public class Address extends VersionedChecksummedBytes {
     /**
      * Construct an address from parameters and the hash160 form. Example:<p>
      *
-     * <pre>new Address(NetworkParameters.prodNet(), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
+     * <pre>new Address(Arrays.asList(NetworkParameters.prodNet()), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
      */
     public Address(List<NetworkParameters> params, byte[] hash160) {
         super(params.get(0).getAddressHeader(), hash160);

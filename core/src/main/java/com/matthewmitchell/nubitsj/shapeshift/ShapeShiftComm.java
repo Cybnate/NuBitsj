@@ -95,6 +95,8 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
 				}catch (ArithmeticException e) {
 					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
+				} catch (NumberFormatException ex) {
+					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
 				}
 			}
 			
@@ -185,6 +187,8 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
 				} catch (ArithmeticException e) {
 					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
+				} catch (NumberFormatException ex) {
+					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
 				}
 			}
 		});
@@ -207,6 +211,8 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 					cbks.rateResponse(rate);
 					
 				} catch (JSONException ex) {
+					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
+				} catch (NumberFormatException ex) {
 					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
 				}
 			}
@@ -235,6 +241,8 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 					cbks.marketInfoResponse(rate, fee, max, min);
 					
 				} catch (JSONException ex) {
+					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
+				} catch (NumberFormatException ex) {
 					cbks.networkError(AsyncHttpClient.PARSE_ERROR, "");
 				}
 			}

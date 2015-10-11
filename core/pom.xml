@@ -22,7 +22,7 @@
     <parent>
         <groupId>com.matthewmitchell</groupId>
         <artifactId>nubitsj-parent</artifactId>
-        <version>0.14.2</version>
+        <version>0.14.3</version>
     </parent>
 
     <artifactId>nubitsj</artifactId>

@@ -79,7 +79,7 @@ public class WalletProtobufSerializer {
     private boolean requireMandatoryExtensions = true;
 
     public interface WalletFactory {
-        Wallet create(NetworkParameters params, KeyChainGroup keyChainGroup);
+        Wallet create(NetworkParameters params, KeyChainGroup keyChainGroup, ValidHashStore validHashStore);
     }
 
     private final WalletFactory factory;
@@ -87,8 +87,8 @@ public class WalletProtobufSerializer {
     public WalletProtobufSerializer() {
         this(new WalletFactory() {
             @Override
-            public Wallet create(NetworkParameters params, KeyChainGroup keyChainGroup) {
-                return new Wallet(params, keyChainGroup);
+            public Wallet create(NetworkParameters params, KeyChainGroup keyChainGroup, ValidHashStore validHashStore) {
+                return new Wallet(params, keyChainGroup, validHashStore);
             }
         });
     }
@@ -380,14 +380,14 @@ public class WalletProtobufSerializer {
      *
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
-    public Wallet readWallet(InputStream input) throws UnreadableWalletException {
+    public Wallet readWallet(InputStream input, ValidHashStore validHashStore) throws UnreadableWalletException {
         try {
             Protos.Wallet walletProto = parseToProto(input);
             final String paramsID = walletProto.getNetworkIdentifier();
             NetworkParameters params = NetworkParameters.fromID(paramsID);
             if (params == null)
                 throw new UnreadableWalletException("Unknown network parameters ID " + paramsID);
-            return readWallet(params, null, walletProto);
+            return readWallet(params, null, walletProto, validHashStore);
         } catch (IOException e) {
             throw new UnreadableWalletException("Could not parse input stream to protobuf", e);
         } catch (IllegalStateException e) {
@@ -407,7 +407,7 @@ public class WalletProtobufSerializer {
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
     public Wallet readWallet(NetworkParameters params, @Nullable WalletExtension[] extensions,
-                             Protos.Wallet walletProto) throws UnreadableWalletException {
+                             Protos.Wallet walletProto, ValidHashStore validHashStore) throws UnreadableWalletException {
         if (walletProto.getVersion() > 1)
             throw new UnreadableWalletException.FutureVersion();
         if (!walletProto.getNetworkIdentifier().equals(params.getId()))
@@ -424,7 +424,7 @@ public class WalletProtobufSerializer {
         } else {
             chain = KeyChainGroup.fromProtobufUnencrypted(params, walletProto.getKeyList(), sigsRequiredToSpend);
         }
-        Wallet wallet = factory.create(params, chain);
+        Wallet wallet = factory.create(params, chain, validHashStore);
 
         List<Script> scripts = Lists.newArrayList();
         for (Protos.Script protoScript : walletProto.getWatchedScriptList()) {

@@ -90,7 +90,7 @@ public class LazyParseByteCacheTest {
     @Before
     public void setUp() throws Exception {
         unitTestParams = UnitTestParams.get();
-        wallet = new Wallet(unitTestParams);
+        wallet = new Wallet(unitTestParams, null);
         wallet.freshReceiveKey();
 
         resetBlockStore();

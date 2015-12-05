@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.*;
+import java.io.IOException;
 
 /**
  * <p>A payment channel is a method of sending money to someone such that the amount of money you send can be adjusted
@@ -235,7 +236,7 @@ public class PaymentChannelClientState {
      * @throws ValueOutOfRangeException if the value being used is too small to be accepted by the network
      * @throws InsufficientMoneyException if the wallet doesn't contain enough balance to initiate
      */
-    public synchronized void initiate() throws ValueOutOfRangeException, InsufficientMoneyException {
+    public synchronized void initiate() throws ValueOutOfRangeException, InsufficientMoneyException, IOException {
         final NetworkParameters params = wallet.getParams();
         Transaction template = new Transaction(params);
         // We always place the client key before the server key because, if either side wants some privacy, they can

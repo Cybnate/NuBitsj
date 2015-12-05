@@ -73,7 +73,7 @@ public class VersionMessage extends Message {
     public boolean relayTxesBeforeFilter;
 
     /** The version of this library release, as a string. */
-    public static final String NubitsJ_VERSION = "0.14.3";
+    public static final String NubitsJ_VERSION = "0.14.4";
     /** The value that is prepended to the subVer field of this application. */
     public static final String LIBRARY_SUBVER = "/nubitsj:" + NubitsJ_VERSION + "/";
 

@@ -44,7 +44,7 @@ public class DefaultRiskAnalysisTest {
 
     @Before
     public void setup() {
-        wallet = new Wallet(params) {
+        wallet = new Wallet(params, null) {
             @Override
             public int getLastBlockSeenHeight() {
                 return 1000;

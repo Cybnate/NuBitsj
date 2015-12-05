@@ -62,6 +62,7 @@ import static com.matthewmitchell.nubitsj.core.Coin.*;
 import static com.matthewmitchell.nubitsj.core.Utils.HEX;
 import static com.matthewmitchell.nubitsj.testing.FakeTxBuilder.*;
 import static com.google.common.base.Preconditions.checkNotNull;
+import java.io.IOException;
 import static org.junit.Assert.*;
 
 public class WalletTest extends TestWithWallet {
@@ -87,7 +88,7 @@ public class WalletTest extends TestWithWallet {
     public void setUp() throws Exception {
         super.setUp();
         // TODO: Move these fields into the right tests so we don't create two wallets for every test case.
-        encryptedWallet = new Wallet(params);
+        encryptedWallet = new Wallet(params, null);
         myEncryptedAddress = encryptedWallet.freshReceiveKey().toAddress(params);
         encryptedWallet.encrypt(PASSWORD1);
         keyCrypter = encryptedWallet.getKeyCrypter();
@@ -106,7 +107,7 @@ public class WalletTest extends TestWithWallet {
     }
 
     private void createMarriedWallet(int threshold, int numKeys, boolean addSigners) throws BlockStoreException {
-        wallet = new Wallet(params);
+        wallet = new Wallet(params, null);
         blockStore = new MemoryBlockStore(params);
         chain = new BlockChain(params, wallet, blockStore, null);
 
@@ -1056,7 +1057,7 @@ public class WalletTest extends TestWithWallet {
     public void keyCreationTime() throws Exception {
         Utils.setMockClock();
         long now = Utils.currentTimeSeconds();
-        wallet = new Wallet(params);
+        wallet = new Wallet(params, null);
         assertEquals(now, wallet.getEarliestKeyCreationTime());
         Utils.rollMockClock(60);
         wallet.freshReceiveKey();
@@ -1067,7 +1068,7 @@ public class WalletTest extends TestWithWallet {
     public void scriptCreationTime() throws Exception {
         Utils.setMockClock();
         long now = Utils.currentTimeSeconds();
-        wallet = new Wallet(params);
+        wallet = new Wallet(params, null);
         assertEquals(now, wallet.getEarliestKeyCreationTime());
         Utils.rollMockClock(-120);
         wallet.addWatchedAddress(new ECKey().toAddress(params));
@@ -1158,7 +1159,7 @@ public class WalletTest extends TestWithWallet {
         DeterministicKey watchKey = wallet.getWatchingKey();
         String serialized = watchKey.serializePubB58();
         watchKey = DeterministicKey.deserializeB58(null, serialized);
-        Wallet watchingWallet = Wallet.fromWatchingKey(params, watchKey);
+        Wallet watchingWallet = Wallet.fromWatchingKey(params, watchKey, null);
         DeterministicKey key2 = watchingWallet.freshReceiveKey();
         assertEquals(myKey, key2);
 
@@ -1514,7 +1515,7 @@ public class WalletTest extends TestWithWallet {
     }
 
     @Test
-    public void importAndEncrypt() throws InsufficientMoneyException {
+    public void importAndEncrypt() throws InsufficientMoneyException, IOException {
         final ECKey key = new ECKey();
         encryptedWallet.importKeysAndEncrypt(ImmutableList.of(key), PASSWORD1);
         assertEquals(1, encryptedWallet.getImportedKeys().size());
@@ -1713,35 +1714,35 @@ public class WalletTest extends TestWithWallet {
         for (int i = 0; i < 29; i++)
             request15.tx.addOutput(CENT, notMyAddr);
         assertTrue(request15.tx.nubitsSerialize().length > 1000);
-        request15.feePerKb = SATOSHI;
+        request15.feePerKb = TWO_CENTS;
         wallet.completeTx(request15);
-        assertEquals(CENT.add(SATOSHI), request15.tx.getFee()); // Nu: Should add kb fee on top of required fee per extra kb
+        assertEquals(TWO_CENTS, request15.tx.getFee()); // Nu: Should add kb fee on top of required fee per extra kb
         Transaction spend15 = request15.tx;
         assertEquals(31, spend15.getOutputs().size());
         Coin outValue15 = ZERO;
         for (TransactionOutput out : spend15.getOutputs())
             outValue15 = outValue15.add(out.getValue());
-        assertEquals(COIN.subtract(CENT.add(SATOSHI)), outValue15);
-
+        assertEquals(COIN.subtract(TWO_CENTS), outValue15);
+        
         SendRequest request16 = SendRequest.to(notMyAddr, CENT);
         request16.feePerKb = ZERO;
         for (int i = 0; i < 29; i++)
             request16.tx.addOutput(CENT, notMyAddr);
         assertTrue(request16.tx.nubitsSerialize().length > 1000);
         wallet.completeTx(request16);
-        assertEquals(CENT, request16.tx.getFee());
+        assertEquals(TWO_CENTS, request16.tx.getFee());
         Transaction spend16 = request16.tx;
         assertEquals(31, spend16.getOutputs().size());
         Coin outValue16 = ZERO;
         for (TransactionOutput out : spend16.getOutputs())
             outValue16 = outValue16.add(out.getValue());
-        assertEquals(COIN.subtract(CENT), outValue16);
+        assertEquals(COIN.subtract(TWO_CENTS), outValue16);
 
         // Nu: Check less than 1kb transaction
         SendRequest request17 = SendRequest.to(notMyAddr, CENT);
         for (int i = 0; i < 21; i++)
             request17.tx.addOutput(CENT, notMyAddr);
-        request17.feePerKb = SATOSHI;
+        request17.feePerKb = CENT;
         wallet.completeTx(request17);
         Transaction spend17 = request17.tx;
         assertEquals(CENT, request17.tx.getFee());
@@ -1756,16 +1757,16 @@ public class WalletTest extends TestWithWallet {
         assertEquals(wallet.getBalance(), TWO_CENTS.add(COIN));
         SendRequest request19 = SendRequest.to(notMyAddr, CENT);
         request19.feePerKb = ZERO;
-        for (int i = 0; i < 99; i++)
+        for (int i = 0; i < 97; i++)
             request19.tx.addOutput(CENT, notMyAddr);
         wallet.completeTx(request19);
-        assertEquals(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE, request19.tx.getFee());
+        assertEquals(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.multiply(4), request19.tx.getFee());
         assertEquals(2, request19.tx.getInputs().size());
         Coin outValue19 = ZERO;
         for (TransactionOutput out : request19.tx.getOutputs())
             outValue19 = outValue19.add(out.getValue());
         // But now our change output is CENT-minfee, so we have to pay min fee
-        assertEquals(outValue19, COIN.add(CENT)); // Nu: We used two cents remember?
+        assertEquals(outValue19, COIN.subtract(TWO_CENTS)); // Nu: We used two cents remember?
 
         // Spend our TWO_CENTS output.
         Transaction spendTx5 = new Transaction(params);
@@ -1790,7 +1791,7 @@ public class WalletTest extends TestWithWallet {
         // Generate a ton of small outputs
         StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, notMyAddr), BigInteger.ONE, 1);
         int i = 0;
-        while (i <= 100) {
+        while (i <= 50) {
             Transaction tx = createFakeTxWithChangeAddress(params, CENT, myAddress, notMyAddr);
             tx.getInput(0).setSequenceNumber(i++); // Keep every transaction unique
             wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, i);
@@ -1798,9 +1799,9 @@ public class WalletTest extends TestWithWallet {
         Coin balance = wallet.getBalance();
 
         // Create a spend that will throw away change 
-        SendRequest request1 = SendRequest.to(notMyAddr, balance.subtract(CENT).subtract(SATOSHI)); // Nu: minus fee
+        SendRequest request1 = SendRequest.to(notMyAddr, balance.subtract(CENT.multiply(8)).subtract(SATOSHI)); // Nu: minus fee
         wallet.completeTx(request1);
-        assertEquals(SATOSHI.add(CENT), request1.tx.getFee()); // Nu: cent fee added
+        assertEquals(SATOSHI.add(CENT.multiply(8)), request1.tx.getFee()); // Nu: cent fee added with 15 kb
         assertEquals(request1.tx.getInputs().size(), i); // We should have spent all inputs
     }
 
@@ -1847,7 +1848,7 @@ public class WalletTest extends TestWithWallet {
     }
 
     @Test
-    public void lowerThanDefaultFee() throws InsufficientMoneyException {
+    public void lowerThanDefaultFee() throws InsufficientMoneyException, IOException {
     	// Nu: Minimum fee forced
         Coin fee = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.divide(10);
         receiveATransactionAmount(wallet, myAddress, Coin.COIN);
@@ -1866,7 +1867,7 @@ public class WalletTest extends TestWithWallet {
     }
 
     @Test
-    public void higherThanDefaultFee() throws InsufficientMoneyException {
+    public void higherThanDefaultFee() throws InsufficientMoneyException, IOException {
         Coin fee = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.multiply(10);
         receiveATransactionAmount(wallet, myAddress, Coin.COIN.multiply(3));
         SendRequest req = SendRequest.to(myAddress, Coin.CENT);
@@ -1885,8 +1886,8 @@ public class WalletTest extends TestWithWallet {
     
     private SendRequest makeJustOneKbReq(Address notMyAddr, Coin value) {
     	
-    	SendRequest request = SendRequest.to(notMyAddr, value.subtract(CENT.multiply(17)));
-        for (int i = 0; i < 16; i++)
+    	SendRequest request = SendRequest.to(notMyAddr, value.subtract(CENT.multiply(10)));
+        for (int i = 0; i < 9; i++)
             request.tx.addOutput(CENT, notMyAddr);
         request.tx.addOutput(new TransactionOutput(params, request.tx, CENT, new byte[16]));
     	
@@ -1919,21 +1920,21 @@ public class WalletTest extends TestWithWallet {
         wallet.completeTx(request1);
         assertEquals(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE, request1.tx.getFee());
         assertEquals(2, request1.tx.getInputs().size());
-        assertEquals(18, request1.tx.getOutputs().size());
+        assertEquals(11, request1.tx.getOutputs().size());
         
         // Nu: We can pay 1.001 with coin and two cents but change is discarded
         
         SendRequest request2 = makeJustOneKbReq(notMyAddr, COIN.add(MILLICOIN));
         wallet.completeTx(request2);
         assertEquals(3, request2.tx.getInputs().size());
-        assertEquals(18, request2.tx.getOutputs().size());
+        assertEquals(11, request2.tx.getOutputs().size());
         
         // Nu: We can pay 0.991 with coin and one cent but change is discarded so two cents are used instead to allow for change
         
         SendRequest request3 = makeJustOneKbReq(notMyAddr, COIN.subtract(CENT).add(MILLICOIN));
         wallet.completeTx(request3);
         assertEquals(3, request3.tx.getInputs().size());
-        assertEquals(19, request3.tx.getOutputs().size());
+        assertEquals(12, request3.tx.getOutputs().size());
 
     }
 
@@ -2088,7 +2089,7 @@ public class WalletTest extends TestWithWallet {
     public void keyRotationRandom() throws Exception {
         Utils.setMockClock();
         // Start with an empty wallet (no HD chain).
-        wallet = new Wallet(params);
+        wallet = new Wallet(params, null);
         // Watch out for wallet-initiated broadcasts.
         MockTransactionBroadcaster broadcaster = new MockTransactionBroadcaster(wallet);
         // Send three cents to two different random keys, then add a key and mark the initial keys as compromised.
@@ -2161,14 +2162,14 @@ public class WalletTest extends TestWithWallet {
 
     private Wallet roundTrip(Wallet wallet) throws UnreadableWalletException {
         Protos.Wallet protos = new WalletProtobufSerializer().walletToProto(wallet);
-        return new WalletProtobufSerializer().readWallet(params, null, protos);
+        return new WalletProtobufSerializer().readWallet(params, null, protos, null);
     }
 
     @Test
     public void keyRotationHD() throws Exception {
         // Test that if we rotate an HD chain, a new one is created and all arrivals on the old keys are moved.
         Utils.setMockClock();
-        wallet = new Wallet(params);
+        wallet = new Wallet(params, null);
         ECKey key1 = wallet.freshReceiveKey();
         ECKey key2 = wallet.freshReceiveKey();
         sendMoneyToWallet(wallet, CENT, key1.toAddress(params), AbstractBlockChain.NewBlockType.BEST_CHAIN);
@@ -2211,7 +2212,7 @@ public class WalletTest extends TestWithWallet {
         };
         kcg.importKeys(badKey, goodKey);
         Utils.rollMockClock(86400);
-        wallet = new Wallet(params, kcg);   // This avoids the automatic HD initialisation
+        wallet = new Wallet(params, kcg, null);   // This avoids the automatic HD initialisation
         assertTrue(fChains.get().isEmpty());
         wallet.upgradeToDeterministic(null);
         DeterministicKey badWatchingKey = wallet.getWatchingKey();
@@ -2414,7 +2415,7 @@ public class WalletTest extends TestWithWallet {
     @Test
     public void keyEvents() throws Exception {
         // Check that we can register an event listener, generate some keys and the callbacks are invoked properly.
-        wallet = new Wallet(params);
+        wallet = new Wallet(params, null);
         final List<ECKey> keys = Lists.newLinkedList();
         wallet.addEventListener(new AbstractWalletEventListener() {
             @Override
@@ -2437,7 +2438,7 @@ public class WalletTest extends TestWithWallet {
         // Create an old-style random wallet.
         KeyChainGroup group = new KeyChainGroup(params);
         group.importKeys(new ECKey(), new ECKey());
-        wallet = new Wallet(params, group);
+        wallet = new Wallet(params, group, null);
         assertTrue(wallet.isDeterministicUpgradeRequired());
         // Use an HD feature.
         wallet.freshReceiveKey();
@@ -2449,7 +2450,7 @@ public class WalletTest extends TestWithWallet {
         // Create an old-style random wallet.
         KeyChainGroup group = new KeyChainGroup(params);
         group.importKeys(new ECKey(), new ECKey());
-        wallet = new Wallet(params, group);
+        wallet = new Wallet(params, group, null);
         assertTrue(wallet.isDeterministicUpgradeRequired());
         KeyCrypter crypter = new KeyCrypterScrypt();
         KeyParameter aesKey = crypter.deriveKey("abc");
@@ -2484,7 +2485,7 @@ public class WalletTest extends TestWithWallet {
         DeterministicKey watchKey = wallet.getWatchingKey();
         String serialized = watchKey.serializePubB58();
         watchKey = DeterministicKey.deserializeB58(null, serialized);
-        Wallet wallet = Wallet.fromWatchingKey(params, watchKey);
+        Wallet wallet = Wallet.fromWatchingKey(params, watchKey, null);
         blockStore = new MemoryBlockStore(params);
         chain = new BlockChain(params, wallet, blockStore, null);
 

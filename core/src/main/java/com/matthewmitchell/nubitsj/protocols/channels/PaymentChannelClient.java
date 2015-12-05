@@ -35,6 +35,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * <p>A class which handles most of the complexity of creating a payment channel connection by providing a
@@ -173,7 +176,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
 
     @Nullable
     @GuardedBy("lock")
-    private CloseReason receiveInitiate(Protos.Initiate initiate, Coin contractValue, Protos.Error.Builder errorBuilder) throws VerificationException, InsufficientMoneyException {
+    private CloseReason receiveInitiate(Protos.Initiate initiate, Coin contractValue, Protos.Error.Builder errorBuilder) throws VerificationException, InsufficientMoneyException, IOException {
         log.info("Got INITIATE message:\n{}", initiate.toString());
 
         final long expireTime = initiate.getExpireTimeSecs();
@@ -286,8 +289,8 @@ public class PaymentChannelClient implements IPaymentChannelClient {
         try {
             checkState(connectionOpen);
             // If we generate an error, we set errorBuilder and closeReason and break, otherwise we return
-            Protos.Error.Builder errorBuilder;
-            CloseReason closeReason;
+            Protos.Error.Builder errorBuilder = null;
+            CloseReason closeReason = null;
             try {
                 switch (msg.getType()) {
                     case SERVER_VERSION:
@@ -348,6 +351,8 @@ public class PaymentChannelClient implements IPaymentChannelClient {
                 errorBuilder = Protos.Error.newBuilder()
                         .setCode(Protos.Error.ErrorCode.SYNTAX_ERROR);
                 closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
+            } catch (IOException ex) {
+                Logger.getLogger(PaymentChannelClient.class.getName()).log(Level.SEVERE, null, ex);
             }
             conn.sendToServer(Protos.TwoWayChannelMessage.newBuilder()
                     .setError(errorBuilder)

@@ -63,12 +63,12 @@ public class WalletProtobufSerializerTest {
     public void setUp() throws Exception {
         BriefLogFormatter.initVerbose();
         myWatchedKey = new ECKey();
-        myWallet = new Wallet(params);
+        myWallet = new Wallet(params, null);
         myKey = new ECKey();
         myKey.setCreationTimeSeconds(123456789L);
         myWallet.importKey(myKey);
         myAddress = myKey.toAddress(params);
-        myWallet = new Wallet(params);
+        myWallet = new Wallet(params, null);
         myWallet.importKey(myKey);
         mScriptCreationTime = new Date().getTime() / 1000 - 1234;
         myWallet.addWatchedAddress(myWatchedKey.toAddress(params), mScriptCreationTime);
@@ -153,7 +153,7 @@ public class WalletProtobufSerializerTest {
         for (int i = 0 ; i < 20 ; i++) {
             myKey = new ECKey();
             myAddress = myKey.toAddress(params);
-            myWallet = new Wallet(params);
+            myWallet = new Wallet(params, null);
             myWallet.importKey(myKey);
             Wallet wallet1 = roundTrip(myWallet);
             assertArrayEquals(myKey.getPubKey(), wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getPubKey());
@@ -239,7 +239,7 @@ public class WalletProtobufSerializerTest {
         ByteArrayInputStream test = new ByteArrayInputStream(output.toByteArray());
         assertTrue(WalletProtobufSerializer.isWallet(test));
         ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
-        return new WalletProtobufSerializer().readWallet(input);
+        return new WalletProtobufSerializer().readWallet(input, null);
     }
 
     @Test
@@ -258,7 +258,7 @@ public class WalletProtobufSerializerTest {
     @Test
     public void testRoundTripMarriedWallet() throws Exception {
         // create 2-of-2 married wallet
-        myWallet = new Wallet(params);
+        myWallet = new Wallet(params, null);
         final DeterministicKeyChain keyChain = new DeterministicKeyChain(new SecureRandom());
         DeterministicKey partnerKey = DeterministicKey.deserializeB58(null, keyChain.getWatchingKey().serializePubB58());
 
@@ -286,21 +286,21 @@ public class WalletProtobufSerializerTest {
         Protos.Wallet proto = new WalletProtobufSerializer().walletToProto(myWallet);
         // Initial extension is mandatory: try to read it back into a wallet that doesn't know about it.
         try {
-            new WalletProtobufSerializer().readWallet(params, null, proto);
+            new WalletProtobufSerializer().readWallet(params, null, proto, null);
             fail();
         } catch (UnreadableWalletException e) {
             assertTrue(e.getMessage().contains("mandatory"));
         }
         Wallet wallet = new WalletProtobufSerializer().readWallet(params,
                 new WalletExtension[]{ new SomeFooExtension("com.whatever.required", true) },
-                proto);
+                proto, null);
         assertTrue(wallet.getExtensions().containsKey("com.whatever.required"));
 
         // Non-mandatory extensions are ignored if the wallet doesn't know how to read them.
-        Wallet wallet2 = new Wallet(params);
+        Wallet wallet2 = new Wallet(params, null);
         wallet2.addExtension(new SomeFooExtension("com.whatever.optional", false));
         Protos.Wallet proto2 = new WalletProtobufSerializer().walletToProto(wallet2);
-        Wallet wallet5 = new WalletProtobufSerializer().readWallet(params, null, proto2);
+        Wallet wallet5 = new WalletProtobufSerializer().readWallet(params, null, proto2, null);
         assertEquals(0, wallet5.getExtensions().size());
     }
 
@@ -308,7 +308,7 @@ public class WalletProtobufSerializerTest {
     public void versions() throws Exception {
         Protos.Wallet.Builder proto = Protos.Wallet.newBuilder(new WalletProtobufSerializer().walletToProto(myWallet));
         proto.setVersion(2);
-        new WalletProtobufSerializer().readWallet(params, null, proto.build());
+        new WalletProtobufSerializer().readWallet(params, null, proto.build(), null);
     }
 
     private static class SomeFooExtension implements WalletExtension {

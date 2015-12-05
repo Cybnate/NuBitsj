@@ -17,9 +17,10 @@
 
 package com.matthewmitchell.nubitsj.store;
 
+import com.google.common.base.Charsets;
 import static com.google.common.base.Preconditions.checkNotNull;
 import com.matthewmitchell.nubitsj.core.AbstractBlockChain;
-import com.matthewmitchell.nubitsj.core.Peer;
+import com.matthewmitchell.nubitsj.core.Coin;
 import com.matthewmitchell.nubitsj.core.Sha256Hash;
 import com.matthewmitchell.nubitsj.core.StoredBlock;
 import com.matthewmitchell.nubitsj.core.Utils;
@@ -31,10 +32,15 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.io.OutputStream;
+import java.io.Reader;
+import java.net.MalformedURLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.util.encoders.Hex;
@@ -150,32 +156,40 @@ public class ValidHashStore {
         return hash;
 
     }
+    
+    private HttpURLConnection getConnection(final URL url, String contentType) throws ProtocolException, IOException {
+        
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setUseCaches(false);
+        connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(30000);
+        connection.setReadTimeout(30000);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", contentType);
+        connection.setRequestProperty("Accept-Encoding", ""); 
+        connection.setDoOutput(true);
+        
+        return connection;
+        
+    }
 
-    private boolean downloadHashes(final URL server, final byte[] locator, final int locatorSize) {
+    private Void downloadHashes(final URL server, final byte[] locator, final int locatorSize) throws IOException {
 
         try {
 
-            HttpURLConnection connection = (HttpURLConnection) server.openConnection();
-            connection.setUseCaches(false);
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(30000);
-            connection.setReadTimeout(30000);
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/octet-stream");
-            connection.setRequestProperty( "Accept-Encoding", "" ); 
-            connection.setDoOutput(true);
-            java.io.OutputStream os = connection.getOutputStream();
+            HttpURLConnection connection = getConnection(server, "application/octet-stream");
+            OutputStream os = connection.getOutputStream();
             os.write(locator, 0, locatorSize);
             os.flush();
             os.close();
+            
+            InputStream is = null;
 
             try {
 
-                connection.connect();
-
                 if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
 
-                    InputStream is = new BufferedInputStream(connection.getInputStream());
+                    is = new BufferedInputStream(connection.getInputStream());
 
                     // We are going to replace the valid hashes with the new ones
 
@@ -193,21 +207,128 @@ public class ValidHashStore {
 
                     file.flush();
                     file.close();
-
-                    return false;
+                    
+                    return null;
 
                 }
 
             } finally {
+                if (is != null)
+                    is.close();
                 connection.disconnect();
             }
 
         } catch (IOException e) {
             log.warn("Got IO error when receiving valid block hashes from " + server.toString(), e);
         }
+        
+        throw new IOException();
+        
+    }
+    
+    private Coin getFee(URL server, byte[] urlParams) throws MalformedURLException, IOException {
+        
+        server = new URL(server.toString() + "/getfee");
+        
+        try {
+            
+            HttpURLConnection connection = getConnection(server, "application/x-www-form-urlencoded");
+            OutputStream os = connection.getOutputStream();
+            os.write(urlParams);
+            os.flush();
+            os.close();
+            
+            InputStream is = null;
+            
+            try {
 
-        return true;
+                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                    
+                    is = connection.getInputStream();
 
+                    Reader reader = new InputStreamReader(is, Charsets.UTF_8);
+                    
+                    final StringBuilder content = new StringBuilder();
+                    final char[] buffer = new char[10];
+                    int n = 0;
+                    while (-1 != (n = reader.read(buffer)))
+                        content.append(buffer, 0, n);
+                    
+                    return Coin.parseCoin(content.toString());
+                    
+                }
+                
+            } finally {
+                if (is != null)
+                    is.close();
+                connection.disconnect();
+            }    
+            
+        } catch (IOException e) {
+            log.warn("Got IO error when obtaining transaction fee from " + server.toString(), e);
+        }
+        
+        throw new IOException();
+        
+    }
+    
+    private abstract class ServerTask <RetType> {
+        
+        abstract RetType run (final URL server) throws IOException;
+    
+        public RetType runAll(boolean mark) throws IOException {
+
+            URL server;
+            boolean failed = false;
+            RetType ret = null;
+
+            do {
+
+                if (failed && mark)
+                    servers.markSuccess(false);
+
+                server = servers.getNext(failed);
+                if (server == null)
+                    throw new IOException("No more servers to try.");
+                
+                try {
+                    ret = run(server);
+                    failed = false;
+                } catch (IOException e) {
+                    failed = true;
+                } 
+
+            } while (failed);
+
+            if (mark)
+                servers.markSuccess(true);
+            
+            return ret;
+
+        }
+        
+    }
+    
+    public Coin getFee(int bytes, Coin amount) throws IOException {
+        
+        String urlParams = String.format("bytes=%d&amount=%s", bytes, amount.toPlainString());
+        final byte[] urlParamsBytes = urlParams.getBytes(Charsets.UTF_8);
+        
+        try {
+            
+            return new ServerTask <Coin> () {
+
+                @Override
+                Coin run(final URL server) throws IOException {
+                    return getFee(server, urlParamsBytes);
+                }
+
+            }.runAll(false);
+            
+        } catch (IOException e) {
+            throw new IOException("Could not obtain fees from any server.");
+        }
+        
     }
 
     public boolean isValidHash(Sha256Hash hash, AbstractBlockChain blockChain, boolean waitForServer) throws IOException {
@@ -224,7 +345,7 @@ public class ValidHashStore {
 
         // Create POST data locator
 
-        byte[] locator = new byte[3200];
+        final byte[] locator = new byte[3200];
 
         BlockStore store = checkNotNull(blockChain).getBlockStore();
         StoredBlock chainHead = blockChain.getChainHead();
@@ -248,22 +369,17 @@ public class ValidHashStore {
         // We assume the server is well connected and 30 seconds would therefore be more than enough in most cases.
         if (waitForServer)
             Utils.sleep(30000);
+        
+        final int locSize = offset;
+        
+        new ServerTask<Void>() {
 
-        URL server;
-        boolean failed = false;
-
-        do {
-
-            if (failed)
-                servers.markSuccess(false);
-
-            server = servers.getNext(failed);
-            if (server == null)
-                throw new IOException("No more servers to try for valid block hashes.");
-
-        } while (failed = downloadHashes(server, locator, offset));
-
-        servers.markSuccess(true);
+            @Override
+            public Void run(final URL server) throws IOException {
+                return downloadHashes(server, locator, locSize);
+            }
+            
+        }.runAll(true);
 
         // Lastly check valid hashes again
         return isInValidHashes(cmpHash);

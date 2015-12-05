@@ -373,7 +373,7 @@ public class WalletAppKit extends AbstractIdleService {
         FileInputStream walletStream = new FileInputStream(vWalletFile);
         try {
             List<WalletExtension> extensions = provideWalletExtensions();
-            wallet = new Wallet(params);
+            wallet = new Wallet(params, validHashStore);
             WalletExtension[] extArray = extensions.toArray(new WalletExtension[extensions.size()]);
             Protos.Wallet proto = WalletProtobufSerializer.parseToProto(walletStream);
             final WalletProtobufSerializer serializer;
@@ -381,7 +381,7 @@ public class WalletAppKit extends AbstractIdleService {
                 serializer = new WalletProtobufSerializer(walletFactory);
             else
                 serializer = new WalletProtobufSerializer();
-            wallet = serializer.readWallet(params, extArray, proto);
+            wallet = serializer.readWallet(params, extArray, proto, validHashStore);
             if (shouldReplayWallet)
                 wallet.clearTransactions(0);
         } finally {
@@ -397,9 +397,9 @@ public class WalletAppKit extends AbstractIdleService {
         else
             kcg = new KeyChainGroup(params);
         if (walletFactory != null) {
-            return walletFactory.create(params, kcg);
+            return walletFactory.create(params, kcg, validHashStore);
         } else {
-            return new Wallet(params, kcg);  // default
+            return new Wallet(params, kcg, validHashStore);  // default
         }
     }
 

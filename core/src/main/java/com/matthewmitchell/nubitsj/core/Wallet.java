@@ -64,6 +64,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static com.google.common.base.Preconditions.*;
+import com.matthewmitchell.nubitsj.store.ValidHashStore;
 
 // To do list:
 //
@@ -211,38 +212,40 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
 
     // Objects that perform transaction signing. Applied subsequently one after another
     @GuardedBy("lock") private List<TransactionSigner> signers;
+    
+    private ValidHashStore validHashStore = null;
 
     /**
      * Creates a new, empty wallet with no keys and no transactions. If you want to restore a wallet from disk instead,
      * see loadFromFile.
      */
-    public Wallet(NetworkParameters params) {
-        this(params, new KeyChainGroup(params));
+    public Wallet(NetworkParameters params, ValidHashStore store) {
+        this(params, new KeyChainGroup(params), store);
     }
 
-    public static Wallet fromSeed(NetworkParameters params, DeterministicSeed seed) {
-        return new Wallet(params, new KeyChainGroup(params, seed));
-    }
-
-    /**
-     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given watching key. A
-     * watching key corresponds to account zero in the recommended BIP32 key hierarchy.
-     */
-    public static Wallet fromWatchingKey(NetworkParameters params, DeterministicKey watchKey, long creationTimeSeconds) {
-        return new Wallet(params, new KeyChainGroup(params, watchKey, creationTimeSeconds));
+    public static Wallet fromSeed(NetworkParameters params, DeterministicSeed seed, ValidHashStore store) {
+        return new Wallet(params, new KeyChainGroup(params, seed), store);
     }
 
     /**
      * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given watching key. A
      * watching key corresponds to account zero in the recommended BIP32 key hierarchy.
      */
-    public static Wallet fromWatchingKey(NetworkParameters params, DeterministicKey watchKey) {
-        return new Wallet(params, new KeyChainGroup(params, watchKey));
+    public static Wallet fromWatchingKey(NetworkParameters params, DeterministicKey watchKey, long creationTimeSeconds, ValidHashStore store) {
+        return new Wallet(params, new KeyChainGroup(params, watchKey, creationTimeSeconds), store);
+    }
+
+    /**
+     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given watching key. A
+     * watching key corresponds to account zero in the recommended BIP32 key hierarchy.
+     */
+    public static Wallet fromWatchingKey(NetworkParameters params, DeterministicKey watchKey, ValidHashStore store) {
+        return new Wallet(params, new KeyChainGroup(params, watchKey), store);
     }
 
     // TODO: When this class moves to the Wallet package, along with the protobuf serializer, then hide this.
     /** For internal use only. */
-    public Wallet(NetworkParameters params, KeyChainGroup keyChainGroup) {
+    public Wallet(NetworkParameters params, KeyChainGroup keyChainGroup, ValidHashStore store) {
         this.params = checkNotNull(params);
         this.keychain = checkNotNull(keyChainGroup);
         // If this keychain was created fresh just now (new wallet), make HD so a backup can be made immediately
@@ -261,6 +264,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
         // Use a linked hash map to ensure ordering of event listeners is correct.
         confidenceChanged = new LinkedHashMap<Transaction, TransactionConfidence.Listener.ChangeReason>();
         signers = new ArrayList<TransactionSigner>();
+        validHashStore = store;
         addTransactionSigner(new LocalTransactionSigner());
         createTransientState();
     }
@@ -1307,12 +1311,12 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
     /**
      * Returns a wallet deserialized from the given file.
      */
-    public static Wallet loadFromFile(File f) throws UnreadableWalletException {
+    public static Wallet loadFromFile(File f, ValidHashStore validHashStore) throws UnreadableWalletException {
         try {
             FileInputStream stream = null;
             try {
                 stream = new FileInputStream(f);
-                return loadFromFileStream(stream);
+                return loadFromFileStream(stream, validHashStore);
             } finally {
                 if (stream != null) stream.close();
             }
@@ -1375,8 +1379,8 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
     /**
      * Returns a wallet deserialized from the given input stream.
      */
-    public static Wallet loadFromFileStream(InputStream stream) throws UnreadableWalletException {
-        Wallet wallet = new WalletProtobufSerializer().readWallet(stream);
+    public static Wallet loadFromFileStream(InputStream stream, ValidHashStore validHashStore) throws UnreadableWalletException {
+        Wallet wallet = new WalletProtobufSerializer().readWallet(stream, validHashStore);
         if (!wallet.isConsistent()) {
             log.error("Loaded an inconsistent wallet");
         }
@@ -3191,7 +3195,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public Transaction createSend(Address address, Coin value) throws InsufficientMoneyException {
+    public Transaction createSend(Address address, Coin value) throws InsufficientMoneyException, IOException {
         SendRequest req = SendRequest.to(address, value);
         if (params == UnitTestParams.get())
             req.shuffleOutputs = false;
@@ -3212,7 +3216,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public Transaction sendCoinsOffline(SendRequest request) throws InsufficientMoneyException {
+    public Transaction sendCoinsOffline(SendRequest request) throws InsufficientMoneyException, IOException {
         lock.lock();
         try {
             completeTx(request);
@@ -3248,7 +3252,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public SendResult sendCoins(TransactionBroadcaster broadcaster, Address to, Coin value) throws InsufficientMoneyException {
+    public SendResult sendCoins(TransactionBroadcaster broadcaster, Address to, Coin value) throws InsufficientMoneyException, IOException {
         SendRequest request = SendRequest.to(to, value);
         return sendCoins(broadcaster, request);
     }
@@ -3273,7 +3277,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public SendResult sendCoins(TransactionBroadcaster broadcaster, SendRequest request) throws InsufficientMoneyException {
+    public SendResult sendCoins(TransactionBroadcaster broadcaster, SendRequest request) throws InsufficientMoneyException, IOException {
         // Should not be locked here, as we're going to call into the broadcaster and that might want to hold its
         // own lock. sendCoinsOffline handles everything that needs to be locked.
         checkState(!lock.isHeldByCurrentThread());
@@ -3305,7 +3309,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public SendResult sendCoins(SendRequest request) throws InsufficientMoneyException {
+    public SendResult sendCoins(SendRequest request) throws InsufficientMoneyException, IOException {
         TransactionBroadcaster broadcaster = vTransactionBroadcaster;
         checkState(broadcaster != null, "No transaction broadcaster is configured");
         return sendCoins(broadcaster, request);
@@ -3324,7 +3328,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public Transaction sendCoins(Peer peer, SendRequest request) throws InsufficientMoneyException {
+    public Transaction sendCoins(Peer peer, SendRequest request) throws InsufficientMoneyException, IOException {
         Transaction tx = sendCoinsOffline(request);
         peer.sendMessage(tx);
         return tx;
@@ -3352,7 +3356,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @throws CouldNotAdjustDownwards if emptying the wallet was requested and the output can't be shrunk for fees without violating a protocol rule.
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Nubits to process (try breaking up the amounts of value)
      */
-    public void completeTx(SendRequest req) throws InsufficientMoneyException {
+    public void completeTx(SendRequest req) throws InsufficientMoneyException, IOException {
         lock.lock();
         try {
             checkArgument(!req.completed, "Given SendRequest has already been completed.");
@@ -3516,21 +3520,27 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
     }
 
     /** Reduce the value of the first output of a transaction to pay the given feePerKb as appropriate for its size. */
-    private boolean adjustOutputDownwardsForFee(Transaction tx, CoinSelection coinSelection, Coin baseFee, Coin feePerKb) {
+    private boolean adjustOutputDownwardsForFee(Transaction tx, CoinSelection coinSelection, Coin baseFee, Coin feePerKb) throws IOException {
+        
         TransactionOutput output = tx.getOutput(0);
+        
         // Check if we need additional fee due to the transaction's size
         int size = tx.nubitsSerialize().length;
         size += estimateBytesForSigning(coinSelection);
         
-        // ppcoin: Always add required fee
-        if (baseFee.compareTo(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE) < 0)
-            baseFee = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE;
+        Coin fee = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE;
+        if (validHashStore != null)
+            fee = validHashStore.getFee(size, output.getValue());
         
-        Coin fee = baseFee.add(feePerKb.multiply((size / 1000)));
+        Coin reqFee = baseFee.add(feePerKb.multiply((size / 1000)));
+        if (reqFee.isGreaterThan(fee))
+            fee = reqFee;
         
         output.setValue(output.getValue().subtract(fee));
+        
         // Fail if output is below minimum allowed value.
         return Transaction.MIN_OUTPUT_VALUE.compareTo(output.getValue()) <= 0;
+        
     }
 
     /**
@@ -3999,9 +4009,38 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
     }
 
     //region Fee calculation code
+    
+    private CoinSelection getSelection (final CoinSelector selector, LinkedList<TransactionOutput> candidates, Coin valueNeeded) throws InsufficientMoneyException {
+        
+        CoinSelection selection = selector.select(valueNeeded, new LinkedList<TransactionOutput>(candidates));
+        // Can we afford this?
+        if (selection.valueGathered.compareTo(valueNeeded) < 0)
+            throw new InsufficientMoneyException(valueNeeded.subtract(selection.valueGathered));
+        
+        return selection;
+        
+    }
+    
+    private int addInputsAndGetSize (final SendRequest req, final CoinSelection selection, final TransactionOutput changeOutput) {
+        
+        for (TransactionOutput output : selection.gathered) {
+            TransactionInput input = req.tx.addInput(output);
+            // If the scriptBytes don't default to none, our size calculations will be thrown off.
+            checkState(input.getScriptBytes().length == 0);
+        }
+        
+        int size = req.tx.nubitsSerialize().length;
+        size += estimateBytesForSigning(selection);
+        
+        if (changeOutput != null)
+            size += changeOutput.nubitsSerialize().length + VarInt.sizeOf(req.tx.getOutputs().size()) - VarInt.sizeOf(req.tx.getOutputs().size() - 1);
+        
+        return size;
+        
+    }
 
     public FeeCalculation calculateFee(SendRequest req, Coin value, List<TransactionInput> originalInputs,
-                                       LinkedList<TransactionOutput> candidates) throws InsufficientMoneyException {
+                                       LinkedList<TransactionOutput> candidates) throws InsufficientMoneyException, IOException {
         checkState(lock.isHeldByCurrentThread());
         FeeCalculation result = new FeeCalculation();
         // There are 3 possibilities for what adding change might do:
@@ -4018,50 +4057,71 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
         // change resulted in the size crossing a 1000 byte boundary. Otherwise it stays at zero.
         int lastCalculatedSize = 0;
         Coin valueNeeded, valueMissing = null;
+        CoinSelector selector = req.coinSelector == null ? coinSelector : req.coinSelector;
+        CoinSelection selection;
+        Coin curFee = null;
+        Coin lastTotalOutputAmount = value;
+        // Start with assumed 0.01NBT fee
+        boolean testRound = true;
+        boolean needFee = true;
+        
         while (true) {
+            
             resetTxInputs(req, originalInputs);
-
-            Coin fees = req.fee == null ? Transaction.REFERENCE_DEFAULT_MIN_TX_FEE : req.fee;
             
-            // ppcoin: We always include the required fee
-            if (fees.compareTo(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE) < 0)
-                fees = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE;
-            
-            if (lastCalculatedSize > 0)
-                // If the size is exactly 1000 bytes then we'll over-pay, but this should be rare.
-                fees = fees.add(req.feePerKb.multiply(lastCalculatedSize / 1000));
+            if (testRound)
+                curFee = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.multiply(lastCalculatedSize / 1000 + 1);
+            else if (needFee) {
+                
+                needFee = false;
+                
+                if (validHashStore != null) {
+                    Coin servFee = validHashStore.getFee(lastCalculatedSize, lastTotalOutputAmount);
+                    // Ensure the fee isn't reduced, otherwise it could cause an infinite loop issue.
+                    if (servFee.isGreaterThan(curFee))
+                        curFee = servFee;
+                }
+                
+                // If request fee is higher, use that
+                Coin reqFee = req.fee.add(req.feePerKb.multiply(lastCalculatedSize / 1000));
+                if (reqFee.isGreaterThan(curFee))
+                    curFee = reqFee;
+                
+            }
 
-            valueNeeded = value.add(fees);
+            valueNeeded = value.add(curFee);
             if (additionalValueForNextCategory != null)
                 valueNeeded = valueNeeded.add(additionalValueForNextCategory);
             Coin additionalValueSelected = additionalValueForNextCategory;
 
             // Of the coins we could spend, pick some that we actually will spend.
-            CoinSelector selector = req.coinSelector == null ? coinSelector : req.coinSelector;
             // selector is allowed to modify candidates list.
-            CoinSelection selection = selector.select(valueNeeded, new LinkedList<TransactionOutput>(candidates));
-            // Can we afford this?
-            if (selection.valueGathered.compareTo(valueNeeded) < 0) {
-                valueMissing = valueNeeded.subtract(selection.valueGathered);
+            try {
+                selection = getSelection(selector, candidates, valueNeeded);
+            } catch (InsufficientMoneyException e) {
+                // Cannot afford this
+                
+                if (selection2 != null && testRound) {
+                    testRound = false;
+                    // Make sure we retest any category 2
+                    additionalValueForNextCategory = null;
+                    selection2 = null;
+                    continue;
+                }
+                
+                valueMissing = e.missing;
                 break;
+                
             }
             checkState(selection.gathered.size() > 0 || originalInputs.size() > 0);
-
-            // We keep track of an upper bound on transaction size to calculate fees that need to be added.
-            // Note that the difference between the upper bound and lower bound is usually small enough that it
-            // will be very rare that we pay a fee we do not need to.
-            //
-            // We can't be sure a selection is valid until we check fee per kb at the end, so we just store
-            // them here temporarily.
-            boolean isCategory2 = false;
 
             Coin change = selection.valueGathered.subtract(valueNeeded);
             if (additionalValueSelected != null)
                 change = change.add(additionalValueSelected);
-
+            
             // If change is < 0.01 NBT, we will need to discard the change
             if (!change.equals(Coin.ZERO) && change.compareTo(Transaction.MIN_OUTPUT_VALUE) < 0) {
-                isCategory2 = true;
+
                 // Want change to go up to the minimum output amount
                 if (additionalValueForNextCategory != null)
                     additionalValueForNextCategory = additionalValueForNextCategory.add(Transaction.MIN_OUTPUT_VALUE.subtract(change));
@@ -4069,10 +4129,21 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
                     additionalValueForNextCategory = Transaction.MIN_OUTPUT_VALUE.subtract(change);
                 // Change is discarded
                 change = Coin.ZERO;
+                
+            }
+            
+            // If total output amount has changed, try again
+            Coin totalOutputAmount = value.add(change);
+            if (!totalOutputAmount.equals(lastTotalOutputAmount)) {
+                lastTotalOutputAmount = totalOutputAmount;
+                if (!testRound) {
+                    needFee = true;
+                    continue;
+                }
             }
 
-            int size = 0;
             TransactionOutput changeOutput = null;
+            
             if (change.signum() > 0) {
                 // The value of the inputs is greater than what we want to send. Just like in real life then,
                 // we need to take back some coins ... this is called "change". Add another output that sends the change
@@ -4081,45 +4152,42 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
                 if (changeAddress == null)
                     changeAddress = getChangeAddress();
                 changeOutput = new TransactionOutput(params, req.tx, change, changeAddress);
-                size += changeOutput.nubitsSerialize().length + VarInt.sizeOf(req.tx.getOutputs().size()) - VarInt.sizeOf(req.tx.getOutputs().size() - 1);
                 additionalValueForNextCategory = null;
             }
+            
+            // Add inputs and estimate size
+            int size = addInputsAndGetSize(req, selection, changeOutput);
 
-            // Now add unsigned inputs for the selected coins.
-            for (TransactionOutput output : selection.gathered) {
-                TransactionInput input = req.tx.addInput(output);
-                // If the scriptBytes don't default to none, our size calculations will be thrown off.
-                checkState(input.getScriptBytes().length == 0);
-            }
+            // Loop again if we need more fee per kb.
 
-            // Estimate transaction size and loop again if we need more fee per kb. The serialized tx doesn't
-            // include things we haven't added yet like input signatures/scripts or the change output.
-            size += req.tx.nubitsSerialize().length;
-            size += estimateBytesForSigning(selection);
-            if (size/1000 > lastCalculatedSize/1000 && req.feePerKb.signum() > 0) {
+            if (size/1000 > lastCalculatedSize/1000) {
                 lastCalculatedSize = size;
                 // We need more fees anyway, just try again with the same additional value
                 additionalValueForNextCategory = additionalValueSelected;
+                needFee = true;
                 continue;
             }
 
-            if (isCategory2) {
-                if (selection2 == null)
-                    selection2 = selection;
-            } else {
+            if (additionalValueForNextCategory == null) {
+                
+                
+                if (testRound) {
+                    testRound = false;
+                    selection2 = null;
+                    continue;
+                }
+                
                 // Once we get a category 1 (change kept), we should break out of the loop because we can't do better
-                checkState(selection1 == null);
-                checkState(additionalValueForNextCategory == null);
                 selection1 = selection;
                 selection1Change = changeOutput;
+                
+                break;
+                
             }
-
-            if (additionalValueForNextCategory != null) {
-                if (additionalValueSelected != null)
-                    checkState(additionalValueForNextCategory.compareTo(additionalValueSelected) > 0);
-                continue;
-            }
-            break;
+            
+            if (selection2 == null)
+                selection2 = selection;
+                
         }
 
         resetTxInputs(req, originalInputs);
@@ -4281,7 +4349,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
 
     /** @deprecated Renamed to doMaintenance */
     @Deprecated
-    public ListenableFuture<List<Transaction>> maybeDoMaintenance(@Nullable KeyParameter aesKey, boolean andSend) throws DeterministicUpgradeRequiresPassword {
+    public ListenableFuture<List<Transaction>> maybeDoMaintenance(@Nullable KeyParameter aesKey, boolean andSend) throws DeterministicUpgradeRequiresPassword, IOException {
         return doMaintenance(aesKey, andSend);
     }
 
@@ -4299,7 +4367,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
      * @return A list of transactions that the wallet just made/will make for internal maintenance. Might be empty.
      * @throws com.matthewmitchell.nubitsj.wallet.DeterministicUpgradeRequiresPassword if key rotation requires the users password.
      */
-    public ListenableFuture<List<Transaction>> doMaintenance(@Nullable KeyParameter aesKey, boolean signAndSend) throws DeterministicUpgradeRequiresPassword {
+    public ListenableFuture<List<Transaction>> doMaintenance(@Nullable KeyParameter aesKey, boolean signAndSend) throws DeterministicUpgradeRequiresPassword, IOException {
         List<Transaction> txns;
         lock.lock();
         keychainLock.lock();
@@ -4338,7 +4406,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
 
     // Checks to see if any coins are controlled by rotating keys and if so, spends them.
     @GuardedBy("keychainLock")
-    private List<Transaction> maybeRotateKeys(@Nullable KeyParameter aesKey, boolean sign) throws DeterministicUpgradeRequiresPassword {
+    private List<Transaction> maybeRotateKeys(@Nullable KeyParameter aesKey, boolean sign) throws DeterministicUpgradeRequiresPassword, IOException {
         checkState(lock.isHeldByCurrentThread());
         checkState(keychainLock.isHeldByCurrentThread());
         List<Transaction> results = Lists.newLinkedList();
@@ -4383,7 +4451,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
     }
 
     @Nullable
-    private Transaction rekeyOneBatch(long timeSecs, @Nullable KeyParameter aesKey, List<Transaction> others, boolean sign) {
+    private Transaction rekeyOneBatch(long timeSecs, @Nullable KeyParameter aesKey, List<Transaction> others, boolean sign) throws IOException {
         lock.lock();
         try {
             // Build the transaction using some custom logic for our special needs. Last parameter to
@@ -4408,7 +4476,7 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
             }
             // When not signing, don't waste addresses.
             rekeyTx.addOutput(toMove.valueGathered, sign ? freshReceiveAddress() : currentReceiveAddress());
-            if (!adjustOutputDownwardsForFee(rekeyTx, toMove, Coin.ZERO, Transaction.REFERENCE_DEFAULT_MIN_TX_FEE)) {
+            if (!adjustOutputDownwardsForFee(rekeyTx, toMove, Transaction.REFERENCE_DEFAULT_MIN_TX_FEE, Transaction.REFERENCE_DEFAULT_MIN_TX_FEE)) {
                 log.error("Failed to adjust rekey tx for fees.");
                 return null;
             }

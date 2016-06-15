@@ -37,6 +37,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+// TODO: The locking in all this class is horrible and not really necessary. We should just run all network stuff on one thread.
 /**
  * A simple NIO MessageWriteTarget which handles all the business logic of a connection (reading+writing bytes).
  * Used only by the NioClient and NioServer classes
@@ -45,7 +46,7 @@ class ConnectionHandler implements MessageWriteTarget {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(ConnectionHandler.class);
 
     private static final int BUFFER_SIZE_LOWER_BOUND = 4096;
-    private static final int BUFFER_SIZE_UPPER_BOUND = 32768;
+    private static final int BUFFER_SIZE_UPPER_BOUND = 65536;
 
     private static final int OUTBOUND_BUFFER_BYTE_COUNT = Message.MAX_SIZE + 24; // 24 byte message header
 
@@ -89,12 +90,10 @@ class ConnectionHandler implements MessageWriteTarget {
         // parser.setWriteTarget which might have re-entered already. In this case we shouldn't add ourselves
         // to the connectedHandlers set.
         lock.lock();
-        boolean alreadyClosed = false;
         try {
-            alreadyClosed = closeCalled;
             this.connectedHandlers = connectedHandlers;
-            if (!alreadyClosed)
-                checkState(connectedHandlers.add(this));
+            if (!closeCalled)
+                checkState(this.connectedHandlers.add(this));
         } finally {
             lock.unlock();
         }
@@ -135,6 +134,7 @@ class ConnectionHandler implements MessageWriteTarget {
 
     @Override
     public void writeBytes(byte[] message) throws IOException {
+        boolean andUnlock = true;
         lock.lock();
         try {
             // Network buffers are not unlimited (and are often smaller than some messages we may wish to send), and
@@ -151,21 +151,26 @@ class ConnectionHandler implements MessageWriteTarget {
             setWriteOps();
         } catch (IOException e) {
             lock.unlock();
-            log.error("Error writing message to connection, closing connection", e);
+            andUnlock = false;
+            log.warn("Error writing message to connection, closing connection", e);
             closeConnection();
             throw e;
         } catch (CancelledKeyException e) {
             lock.unlock();
-            log.error("Error writing message to connection, closing connection", e);
+            andUnlock = false;
+            log.warn("Error writing message to connection, closing connection", e);
             closeConnection();
             throw new IOException(e);
+        } finally {
+            if (andUnlock)
+                lock.unlock();
         }
-        lock.unlock();
     }
 
-    @Override
     // May NOT be called with lock held
+    @Override
     public void closeConnection() {
+        checkState(!lock.isHeldByCurrentThread());
         try {
             channel.close();
         } catch (IOException e) {
@@ -225,7 +230,8 @@ class ConnectionHandler implements MessageWriteTarget {
         } catch (Exception e) {
             // This can happen eg if the channel closes while the thread is about to get killed
             // (ClosedByInterruptException), or if handler.parser.receiveBytes throws something
-            log.error("Error handling SelectionKey: {}", Throwables.getRootCause(e).getMessage());
+            Throwable t = Throwables.getRootCause(e);
+            log.warn("Error handling SelectionKey: {}", t.getMessage() != null ? t.getMessage() : t.getClass().getName());
             handler.closeConnection();
         }
     }

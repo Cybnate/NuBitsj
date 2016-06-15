@@ -52,7 +52,7 @@ public class BuildCheckpoints {
     private static final File TEXTUAL_CHECKPOINTS_FILE = new File("checkpoints.txt");
 
     public static void main(String[] args) throws Exception {
-        BriefLogFormatter.init();
+        BriefLogFormatter.initWithSilentNubitsJ();
 
         // Sorted map of block height to StoredBlock object.
         final TreeMap<Integer, StoredBlock> checkpoints = new TreeMap<Integer, StoredBlock>();
@@ -62,7 +62,9 @@ public class BuildCheckpoints {
         final BlockStore store = new MemoryBlockStore(PARAMS);
         final BlockChain chain = new BlockChain(PARAMS, store);
         final PeerGroup peerGroup = new PeerGroup(PARAMS, chain);
-        peerGroup.addAddress(InetAddress.getLocalHost());
+        final InetAddress peerAddress = InetAddress.getLocalHost();
+        System.out.println("Connecting to " + peerAddress + "...");
+        peerGroup.addAddress(peerAddress);
         long now = new Date().getTime() / 1000;
         peerGroup.setFastCatchupTimeSecs(now);
 
@@ -80,8 +82,7 @@ public class BuildCheckpoints {
             }
         }, Threading.SAME_THREAD);
 
-        peerGroup.startAsync();
-        peerGroup.awaitRunning();
+        peerGroup.start();
         peerGroup.downloadBlockChain();
 
         checkState(checkpoints.size() > 0);
@@ -90,8 +91,7 @@ public class BuildCheckpoints {
         writeBinaryCheckpoints(checkpoints, PLAIN_CHECKPOINTS_FILE);
         writeTextualCheckpoints(checkpoints, TEXTUAL_CHECKPOINTS_FILE);
 
-        peerGroup.stopAsync();
-        peerGroup.awaitTerminated();
+        peerGroup.stop();
         store.close();
 
         // Sanity check the created files.
@@ -101,7 +101,7 @@ public class BuildCheckpoints {
 
     private static void writeBinaryCheckpoints(TreeMap<Integer, StoredBlock> checkpoints, File file) throws Exception {
         final FileOutputStream fileOutputStream = new FileOutputStream(file, false);
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        MessageDigest digest = Sha256Hash.newDigest();
         final DigestOutputStream digestOutputStream = new DigestOutputStream(fileOutputStream, digest);
         digestOutputStream.on(false);
         final DataOutputStream dataOutputStream = new DataOutputStream(digestOutputStream);
@@ -116,7 +116,7 @@ public class BuildCheckpoints {
             buffer.position(0);
         }
         dataOutputStream.close();
-        Sha256Hash checkpointsHash = new Sha256Hash(digest.digest());
+        Sha256Hash checkpointsHash = Sha256Hash.wrap(digest.digest());
         System.out.println("Hash of checkpoints data is " + checkpointsHash);
         digestOutputStream.close();
         fileOutputStream.close();

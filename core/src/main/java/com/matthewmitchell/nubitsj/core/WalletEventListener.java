@@ -107,7 +107,8 @@ public interface WalletEventListener extends KeyChainEventListener {
      *     <li>A pending transaction changes confidence due to some non-new-block related event, such as being
      *     announced by more peers or by  a double-spend conflict being observed.</li>
      *     <li>A re-organize occurs. Call occurs only if the re-org modified any of our transactions.</li>
-     *     <li>A new spend is committed to the wallet</li>
+     *     <li>A new spend is committed to the wallet.</li>
+     *     <li>The wallet is reset and all transactions removed.<li>
      * </ol>
      *
      * <p>When this is called you can refresh the UI contents from the wallet contents. It's more efficient to use
@@ -116,7 +117,11 @@ public interface WalletEventListener extends KeyChainEventListener {
      */
     void onWalletChanged(Wallet wallet);
 
-    /** Called whenever a new watched script is added to the wallet. */
-    void onScriptsAdded(Wallet wallet, List<Script> scripts);
+    /**
+     * Called whenever a new watched script is added to the wallet.
+     *
+     * @param isAddingScripts will be true if added scripts, false if removed scripts.
+     */
+    void onScriptsChanged(Wallet wallet, List<Script> scripts, boolean isAddingScripts);
 
 }

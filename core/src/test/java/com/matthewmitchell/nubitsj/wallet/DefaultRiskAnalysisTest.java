@@ -17,22 +17,20 @@
 
 package com.matthewmitchell.nubitsj.wallet;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.*;
 import com.matthewmitchell.nubitsj.core.*;
-import com.matthewmitchell.nubitsj.params.MainNetParams;
-import com.matthewmitchell.nubitsj.script.ScriptBuilder;
-import com.matthewmitchell.nubitsj.script.ScriptChunk;
-import com.google.common.collect.ImmutableList;
-import com.matthewmitchell.nubitsj.wallet.DefaultRiskAnalysis;
-import com.matthewmitchell.nubitsj.wallet.RiskAnalysis;
-import org.junit.Before;
-import org.junit.Test;
+import com.matthewmitchell.nubitsj.crypto.*;
+import com.matthewmitchell.nubitsj.params.*;
+import com.matthewmitchell.nubitsj.script.*;
+import com.matthewmitchell.nubitsj.testing.FakeTxBuilder;
+import com.matthewmitchell.nubitsj.wallet.DefaultRiskAnalysis.*;
+import org.junit.*;
 
-import static com.matthewmitchell.nubitsj.core.Coin.COIN;
-import static com.matthewmitchell.nubitsj.script.ScriptOpCodes.OP_PUSHDATA1;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
+import java.util.*;
+
+import static com.matthewmitchell.nubitsj.core.Coin.*;
+import static com.matthewmitchell.nubitsj.script.ScriptOpCodes.*;
+import static org.junit.Assert.*;
 
 public class DefaultRiskAnalysisTest {
     // Uses mainnet because isStandard checks are disabled on testnet.
@@ -44,7 +42,7 @@ public class DefaultRiskAnalysisTest {
 
     @Before
     public void setup() {
-        wallet = new Wallet(params, null) {
+        wallet = new Wallet(new Context(params), null) {
             @Override
             public int getLastBlockSeenHeight() {
                 return 1000;
@@ -57,6 +55,16 @@ public class DefaultRiskAnalysisTest {
         };
     }
 
+    @Test(expected = IllegalStateException.class)
+    public void analysisCantBeUsedTwice() {
+        Transaction tx = new Transaction(params);
+        DefaultRiskAnalysis analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
+        assertEquals(RiskAnalysis.Result.OK, analysis.analyze());
+        assertNull(analysis.getNonFinal());
+        // Verify we can't re-use a used up risk analysis.
+        analysis.analyze();
+    }
+
     @Test
     public void nonFinal() throws Exception {
         // Verify that just having a lock time in the future is not enough to be considered risky (it's still final).
@@ -65,31 +73,20 @@ public class DefaultRiskAnalysisTest {
         tx.addOutput(COIN, key1);
         tx.setLockTime(TIMESTAMP + 86400);
 
-        {
-            DefaultRiskAnalysis analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
-            assertEquals(RiskAnalysis.Result.OK, analysis.analyze());
-            assertNull(analysis.getNonFinal());
-            // Verify we can't re-use a used up risk analysis.
-            try {
-                analysis.analyze();
-                fail();
-            } catch (IllegalStateException e) {}
-        }
+        DefaultRiskAnalysis analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
+        assertEquals(RiskAnalysis.Result.OK, analysis.analyze());
+        assertNull(analysis.getNonFinal());
 
         // Set a sequence number on the input to make it genuinely non-final. Verify it's risky.
-        input.setSequenceNumber(1);
-        {
-            DefaultRiskAnalysis analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
+        input.setSequenceNumber(TransactionInput.NO_SEQUENCE - 1);
+        analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
             assertEquals(RiskAnalysis.Result.NON_FINAL, analysis.analyze());
             assertEquals(tx, analysis.getNonFinal());
-        }
 
         // If the lock time is the current block, it's about to become final and we consider it non-risky.
         tx.setLockTime(1000);
-        {
-            DefaultRiskAnalysis analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
-            assertEquals(RiskAnalysis.Result.OK, analysis.analyze());
-        }
+        analysis = DefaultRiskAnalysis.FACTORY.create(wallet, tx, NO_DEPS);
+        assertEquals(RiskAnalysis.Result.OK, analysis.analyze());
     }
 
     @Test
@@ -160,6 +157,50 @@ public class DefaultRiskAnalysisTest {
         assertEquals(DefaultRiskAnalysis.RuleViolation.NONE, DefaultRiskAnalysis.isStandard(tx));
         tx.addOutput(new TransactionOutput(params, null, COIN, nonStandardScript));
         assertEquals(DefaultRiskAnalysis.RuleViolation.SHORTEST_POSSIBLE_PUSHDATA, DefaultRiskAnalysis.isStandard(tx));
+    }
+
+    @Test
+    public void canonicalSignature() {
+        TransactionSignature sig = TransactionSignature.dummy();
+        Script scriptOk = ScriptBuilder.createInputScript(sig);
+        assertEquals(RuleViolation.NONE,
+                DefaultRiskAnalysis.isInputStandard(new TransactionInput(params, null, scriptOk.getProgram())));
+
+        byte[] sigBytes = sig.encodeToNubits();
+        // Appending a zero byte makes the signature uncanonical without violating DER encoding.
+        Script scriptUncanonicalEncoding = new ScriptBuilder().data(Arrays.copyOf(sigBytes, sigBytes.length + 1))
+                .build();
+        assertEquals(RuleViolation.SIGNATURE_CANONICAL_ENCODING,
+                DefaultRiskAnalysis.isInputStandard(new TransactionInput(params, null, scriptUncanonicalEncoding
+                        .getProgram())));
+    }
+
+    @Test
+    public void canonicalSignatureLowS() {
+        // First, a synthetic test.
+        TransactionSignature sig = TransactionSignature.dummy();
+        Script scriptHighS = ScriptBuilder
+                .createInputScript(new TransactionSignature(sig.r, ECKey.CURVE.getN().subtract(sig.s)));
+        assertEquals(RuleViolation.SIGNATURE_CANONICAL_ENCODING,
+                DefaultRiskAnalysis.isInputStandard(new TransactionInput(params, null, scriptHighS.getProgram())));
+
+        // This is a real transaction. Its signatures S component is "low".
+        Transaction tx1 = new Transaction(params, Utils.HEX.decode(
+                "01000000112233440200a2be4376b7f47250ad9ad3a83b6aa5eb6a6d139a1f50771704d77aeb8ce76c010000006a4730440220055723d363cd2d4fe4e887270ebdf5c4b99eaf233a5c09f9404f888ec8b839350220763c3794d310b384ce86decfb05787e5bfa5d31983db612a2dde5ffec7f396ae012102ef47e27e0c4bdd6dc83915f185d972d5eb8515c34d17bad584a9312e59f4e0bcffffffff52239451d37757eeacb86d32864ec1ee6b6e131d1e3fee6f1cff512703b71014030000006b483045022100ea266ac4f893d98a623a6fc0e6a961cd5a3f32696721e87e7570a68851917e75022056d75c3b767419f6f6cb8189a0ad78d45971523908dc4892f7594b75fd43a8d00121038bb455ca101ebbb0ecf7f5c01fa1dcb7d14fbf6b7d7ea52ee56f0148e72a736cffffffff0630b15a00000000001976a9146ae477b690cf85f21c2c01e2c8639a5c18dc884e88ac4f260d00000000001976a91498d08c02ab92a671590adb726dddb719695ee12e88ac65753b00000000001976a9140b2eb4ba6d364c82092f25775f56bc10cd92c8f188ac65753b00000000001976a914d1cb414e22081c6ba3a935635c0f1d837d3c5d9188ac65753b00000000001976a914df9d137a0d279471a2796291874c29759071340b88ac3d753b00000000001976a91459f5aa4815e3aa8e1720e8b82f4ac8e6e904e47d88ac0000000042"));
+        assertEquals("d43e8698a78e39a17119eb1139db3494738b0160a7d84712bd34ad296fb867d7", tx1.getHashAsString());
+
+        assertEquals(RuleViolation.NONE, DefaultRiskAnalysis.isStandard(tx1));
+
+        // This tx is the same as the above, except for a "high" S component on the signature of input 1.
+        // It was part of the Oct 2015 malleability attack.
+        Transaction tx2 = new Transaction(params, Utils.HEX.decode(
+                "01000000112233440200a2be4376b7f47250ad9ad3a83b6aa5eb6a6d139a1f50771704d77aeb8ce76c010000006a4730440220055723d363cd2d4fe4e887270ebdf5c4b99eaf233a5c09f9404f888ec8b839350220763c3794d310b384ce86decfb05787e5bfa5d31983db612a2dde5ffec7f396ae012102ef47e27e0c4bdd6dc83915f185d972d5eb8515c34d17bad584a9312e59f4e0bcffffffff52239451d37757eeacb86d32864ec1ee6b6e131d1e3fee6f1cff512703b71014030000006c493046022100ea266ac4f893d98a623a6fc0e6a961cd5a3f32696721e87e7570a68851917e75022100a928a3c4898be60909347e765f52872a613d8aada66c57a8c8791316d2f298710121038bb455ca101ebbb0ecf7f5c01fa1dcb7d14fbf6b7d7ea52ee56f0148e72a736cffffffff0630b15a00000000001976a9146ae477b690cf85f21c2c01e2c8639a5c18dc884e88ac4f260d00000000001976a91498d08c02ab92a671590adb726dddb719695ee12e88ac65753b00000000001976a9140b2eb4ba6d364c82092f25775f56bc10cd92c8f188ac65753b00000000001976a914d1cb414e22081c6ba3a935635c0f1d837d3c5d9188ac65753b00000000001976a914df9d137a0d279471a2796291874c29759071340b88ac3d753b00000000001976a91459f5aa4815e3aa8e1720e8b82f4ac8e6e904e47d88ac0000000042"));
+        assertEquals("4503fe704a402367aac68e4b68a9403a50295adcdf4774b0c92ae8f001351b51", tx2.getHashAsString());
+        assertFalse(ECKey.ECDSASignature
+                .decodeFromDER(new Script(tx2.getInputs().get(1).getScriptBytes()).getChunks().get(0).data)
+                .isCanonical());
+
+        assertEquals(RuleViolation.SIGNATURE_CANONICAL_ENCODING, DefaultRiskAnalysis.isStandard(tx2));
     }
 
     @Test

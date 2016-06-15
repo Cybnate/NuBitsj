@@ -17,11 +17,13 @@
 package com.matthewmitchell.nubitsj.protocols.channels;
 
 import com.matthewmitchell.nubitsj.core.Coin;
+import com.matthewmitchell.nubitsj.core.ECKey;
 import com.matthewmitchell.nubitsj.core.InsufficientMoneyException;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import com.google.protobuf.ByteString;
 import com.matthewmitchell.nubitsj.paymentchannel.Protos;
+import org.spongycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nullable;
 
@@ -82,9 +84,12 @@ public interface IPaymentChannelClient {
      *                                  ({@link PaymentChannelClientConnection#state()}.getTotalValue())
      * @throws IllegalStateException If the channel has been closed or is not yet open
      *                               (see {@link PaymentChannelClientConnection#getChannelOpenFuture()} for the second)
+     * @throws ECKey.KeyIsEncryptedException If the keys are encrypted and no AES key has been provided,
      * @return a future that completes when the server acknowledges receipt and acceptance of the payment.
      */
-    ListenableFuture<PaymentIncrementAck> incrementPayment(Coin size, @Nullable ByteString info) throws ValueOutOfRangeException, IllegalStateException;
+    ListenableFuture<PaymentIncrementAck> incrementPayment(Coin size, @Nullable ByteString info,
+                                                           @Nullable KeyParameter userKey)
+            throws ValueOutOfRangeException, IllegalStateException, ECKey.KeyIsEncryptedException;
 
     /**
      * Implements the connection between this client and the server, providing an interface which allows messages to be
@@ -126,11 +131,11 @@ public interface IPaymentChannelClient {
          * @param expireTime The time, in seconds,  when this channel will be closed by the server. Note this is in absolute time, i.e. seconds since 1970-01-01T00:00:00.
          * @return <code>true</code> if the proposed time is acceptable <code>false</code> otherwise.
          */
-        public boolean acceptExpireTime(long expireTime);
+        boolean acceptExpireTime(long expireTime);
 
         /**
          * <p>Indicates the channel has been successfully opened and
-         * {@link com.matthewmitchell.nubitsj.protocols.channels.PaymentChannelClient#incrementPayment(java.math.BigInteger)}
+         * {@link com.matthewmitchell.nubitsj.protocols.channels.PaymentChannelClient#incrementPayment(Coin)}
          * may be called at will.</p>
          *
          * <p>Called while holding a lock on the {@link com.matthewmitchell.nubitsj.protocols.channels.PaymentChannelClient}

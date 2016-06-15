@@ -20,6 +20,7 @@ package com.matthewmitchell.nubitsj.core;
 import com.matthewmitchell.nubitsj.params.*;
 import com.matthewmitchell.nubitsj.script.Script;
 import com.matthewmitchell.nubitsj.script.ScriptOpCodes;
+import com.matthewmitchell.nubitsj.net.discovery.HttpDiscovery;
 import com.google.common.base.Objects;
 
 import javax.annotation.Nullable;
@@ -31,6 +32,7 @@ import java.util.*;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.matthewmitchell.nubitsj.core.Coin.*;
+import com.matthewmitchell.nubitsj.utils.MonetaryFormat;
 
 /**
  * <p>NetworkParameters contains the data needed for working with an instantiation of a Nubits chain.</p>
@@ -40,7 +42,7 @@ import static com.matthewmitchell.nubitsj.core.Coin.*;
  * intended for unit testing and local app development purposes. Although this class contains some aliases for
  * them, you are encouraged to call the static get() methods on each specific params class directly.</p>
  */
-public abstract class NetworkParameters implements Serializable {
+public abstract class NetworkParameters extends CoinDetails implements Serializable {
     /**
      * The protocol version this library implements.
      */
@@ -57,25 +59,19 @@ public abstract class NetworkParameters implements Serializable {
     protected Block genesisBlock;
     protected int port;
     protected long packetMagic;
-    protected int addressHeader;
-    protected int p2shHeader;
     protected int dumpedPrivateKeyHeader;
     protected int interval;
     protected int targetTimespan;
-
-    /**
-     * See getId(). This may be null for old deserialized wallets. In that case we derive it heuristically
-     * by looking at the port number.
-     */
-    protected String id;
+    protected int bip32HeaderPub;
+    protected int bip32HeaderPriv;
 
     /**
      * The depth of blocks required for a coinbase transaction to be spendable.
      */
     protected int spendableCoinbaseDepth;
-
-    protected int[] acceptableAddressCodes;
     protected String[] dnsSeeds;
+    protected int[] addrSeeds;
+    protected HttpDiscovery.Details[] httpSeeds = {};
     protected Map<Integer, Sha256Hash> checkpoints = new HashMap<Integer, Sha256Hash>();
 
     protected NetworkParameters() {
@@ -133,13 +129,6 @@ public abstract class NetworkParameters implements Serializable {
         return UnitTestParams.get();
     }
 
-    /**
-     * A Java package style string acting as unique ID for these parameters
-     */
-    public String getId() {
-        return id;
-    }
-
     public abstract String getPaymentProtocolId();
 
     @Override
@@ -184,6 +173,7 @@ public abstract class NetworkParameters implements Serializable {
     /**
      * Returns true if the NetworkParameters is for a ShapeShift coin. ie. not NuBits
      */
+    @Override
     public boolean isShapeShift() {
         return false;
     }
@@ -209,6 +199,15 @@ public abstract class NetworkParameters implements Serializable {
         return dnsSeeds;
     }
 
+    /** Returns IP address of active peers. */
+    public int[] getAddrSeeds() {
+        return addrSeeds;
+    }
+
+    /** Returns discovery objects for seeds implementing the Cartographer protocol. See {@link org.bitcoinj.net.discovery.HttpDiscovery} for more info. */
+    public HttpDiscovery.Details[] getHttpSeeds() {
+        return httpSeeds;
+    }
     /**
      * <p>Genesis block for this chain.</p>
      *
@@ -234,22 +233,6 @@ public abstract class NetworkParameters implements Serializable {
         return packetMagic;
     }
 
-    /**
-     * First byte of a base58 encoded address. See {@link com.matthewmitchell.nubitsj.core.Address}. This is the same as acceptableAddressCodes[0] and
-     * is the one used for "normal" addresses. Other types of address may be encountered with version codes found in
-     * the acceptableAddressCodes array.
-     */
-    public int getAddressHeader() {
-        return addressHeader;
-    }
-
-    /**
-     * First byte of a base58 encoded P2SH address.  P2SH addresses are defined as part of BIP0013.
-     */
-    public int getP2SHHeader() {
-        return p2shHeader;
-    }
-
     /** First byte of a base58 encoded dumped private key. See {@link com.matthewmitchell.nubitsj.core.DumpedPrivateKey}. */
     public int getDumpedPrivateKeyHeader() {
         return dumpedPrivateKeyHeader;
@@ -262,15 +245,6 @@ public abstract class NetworkParameters implements Serializable {
      */
     public int getTargetTimespan() {
         return targetTimespan;
-    }
-
-    /**
-     * The version codes that prefix addresses which are acceptable on this network. Although Satoshi intended these to
-     * be used for "versioning", in fact they are today used to discriminate what kind of data is contained in the
-     * address and to prevent accidentally sending coins across chains which would destroy them.
-     */
-    public int[] getAcceptableAddressCodes() {
-        return acceptableAddressCodes;
     }
 
     /**
@@ -288,8 +262,38 @@ public abstract class NetworkParameters implements Serializable {
     /**
      * Used to parse a coin string into a Monetary for this network.
      */
-    public Monetary parseCoin(String str) {
+    @Override
+    public Coin parseCoin(String str) {
         return Coin.parseCoin(str);
     }
 
+    /** Returns the 4 byte header for BIP32 (HD) wallet - public key part. */
+    public int getBip32HeaderPub() {
+        return bip32HeaderPub;
+    }
+
+    /** Returns the 4 byte header for BIP32 (HD) wallet - private key part. */
+    public int getBip32HeaderPriv() {
+        return bip32HeaderPriv;
+    }
+
+    /**
+     * Returns the number of coins that will be produced in total, on this
+     * network. Where not applicable, a very large number of coins is returned
+     * instead (i.e. the main coin issue for Dogecoin).
+     */
+    public abstract Coin getMaxMoney();
+
+    /**
+     * Any standard (ie pay-to-address) output smaller than this value will
+     * most likely be rejected by the network.
+     */
+    public abstract Coin getMinOutputValue();
+
+    /**
+     * Returns whether this network has a maximum number of coins (finite supply) or
+     * not. Always returns true for Bitcoin, but exists to be overriden for other
+     * networks.
+     */
+    public abstract boolean hasMaxMoney();
 }

@@ -16,8 +16,7 @@
 
 package com.matthewmitchell.nubitsj.params;
 
-import com.matthewmitchell.nubitsj.core.Block;
-import com.matthewmitchell.nubitsj.core.NetworkParameters;
+import com.matthewmitchell.nubitsj.core.*;
 
 import java.math.BigInteger;
 
@@ -25,7 +24,11 @@ import java.math.BigInteger;
  * Network parameters used by the nubitsj unit tests (and potentially your own). This lets you solve a block using
  * {@link com.matthewmitchell.nubitsj.core.Block#solve()} by setting difficulty to the easiest possible.
  */
-public class UnitTestParams extends NetworkParameters {
+public class UnitTestParams extends AbstractNubitsNetParams {
+    // A simple static key/address for re-use in unit tests, to speed things up.
+    public static ECKey TEST_KEY = new ECKey();
+    public static Address TEST_ADDRESS;
+
     public UnitTestParams() {
         super();
         id = ID_UNITTESTNET;
@@ -35,25 +38,28 @@ public class UnitTestParams extends NetworkParameters {
         acceptableAddressCodes = new int[] { addressHeader, p2shHeader };
         genesisBlock.setTime(System.currentTimeMillis() / 1000);
         genesisBlock.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
-        genesisBlock.solve();
         port = 18333;
         interval = 10;
         dumpedPrivateKeyHeader = 239;
         targetTimespan = 200000000;  // 6 years. Just a very big number.
         spendableCoinbaseDepth = 5;
         dnsSeeds = null;
+        addrSeeds = null;
+        bip32HeaderPub = 0x043587CF;
+        bip32HeaderPriv = 0x04358394;
     }
 
     private static UnitTestParams instance;
     public static synchronized UnitTestParams get() {
         if (instance == null) {
             instance = new UnitTestParams();
+            TEST_ADDRESS = TEST_KEY.toAddress(instance);
         }
         return instance;
     }
 
     @Override
     public String getPaymentProtocolId() {
-        return null;
+        return "unittest";
     }
 }

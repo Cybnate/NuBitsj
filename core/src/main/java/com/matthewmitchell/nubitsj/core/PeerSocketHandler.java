@@ -100,10 +100,6 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
         try {
             if (writeTarget == null) {
                 closePending = true;
-                if (peerGroup != null) {
-                    // Handle peer death
-                    peerGroup.handlePeerDeath((Peer) this, null);
-                }
                 return;
             }
         } finally {
@@ -129,11 +125,12 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
                 buff.capacity() >= NubitsSerializer.NubitsPacketHeader.HEADER_LENGTH + 4);
         try {
             // Repeatedly try to deserialize messages until we hit a BufferUnderflowException
-            for (int i = 0; true; i++) {
+            boolean firstMessage = true;
+            while (true) {
                 // If we are in the middle of reading a message, try to fill that one first, before we expect another
                 if (largeReadBuffer != null) {
                     // This can only happen in the first iteration
-                    checkState(i == 0);
+                    checkState(firstMessage);
                     // Read new bytes into the largeReadBuffer
                     int bytesToGet = Math.min(buff.remaining(), largeReadBuffer.length - largeReadBufferPos);
                     buff.get(largeReadBuffer, largeReadBufferPos, bytesToGet);
@@ -144,6 +141,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
                         processMessage(serializer.deserializePayload(header, ByteBuffer.wrap(largeReadBuffer)));
                         largeReadBuffer = null;
                         header = null;
+                        firstMessage = false;
                     } else // ...or just returning if we don't have enough bytes yet
                         return buff.position();
                 }
@@ -154,7 +152,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
                     message = serializer.deserialize(buff);
                 } catch (BufferUnderflowException e) {
                     // If we went through the whole buffer without a full message, we need to use the largeReadBuffer
-                    if (i == 0 && buff.limit() == buff.capacity()) {
+                    if (firstMessage && buff.limit() == buff.capacity()) {
                         // ...so reposition the buffer to 0 and read the next message header
                         buff.position(0);
                         try {
@@ -181,6 +179,7 @@ public abstract class PeerSocketHandler extends AbstractTimeoutHandler implement
                 }
                 // Process our freshly deserialized message
                 processMessage(message);
+                firstMessage = false;
             }
         } catch (Exception e) {
             exceptionCaught(e);

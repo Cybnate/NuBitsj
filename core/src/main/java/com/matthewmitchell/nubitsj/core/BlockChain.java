@@ -1,5 +1,6 @@
 /**
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,11 +25,11 @@ import com.matthewmitchell.nubitsj.store.ValidHashStore;
 import java.util.ArrayList;
 import java.util.List;
 
+// TODO: Rename this class to SPVBlockChain at some point.
 /**
- * <p>A BlockChain implements the <i>simplified payment verification</i> mode of the Nubits protocol. It is the right
+ * A BlockChain implements the <i>simplified payment verification</i> mode of the NuBits protocol. It is the right
  * choice to use for programs that have limited resources as it won't verify transactions signatures or attempt to store
  * all of the block chain. Really, this class should be called SPVBlockChain but for backwards compatibility it is not.
- * </p>
  */
 public class BlockChain extends AbstractBlockChain {
     /** Keeps a map of block hashes to StoredBlocks. */
@@ -36,23 +37,32 @@ public class BlockChain extends AbstractBlockChain {
 
     /**
      * <p>Constructs a BlockChain connected to the given wallet and store. To obtain a {@link Wallet} you can construct
-     * one from scratch, or you can deserialize a saved wallet from disk using {@link Wallet#loadFromFile(java.io.File)}
-     * </p>
+     * one from scratch, or you can deserialize a saved wallet from disk using
+     * {@link Wallet#loadFromFile(java.io.File, WalletExtension...)}</p>
      *
      * <p>For the store, you should use {@link com.matthewmitchell.nubitsj.store.SPVBlockStore} or you could also try a
      * {@link com.matthewmitchell.nubitsj.store.MemoryBlockStore} if you want to hold all headers in RAM and don't care about
      * disk serialization (this is rare).</p>
      */
-    public BlockChain(NetworkParameters params, Wallet wallet, BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
-        this(params, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
+    public BlockChain(Context context, Wallet wallet, BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(context, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
         if (wallet != null)
             addWallet(wallet);
     }
 
+    /** See {@link #BlockChain(Context, Wallet, BlockStore, ValidHashStore)}} */
+    public BlockChain(NetworkParameters params, Wallet wallet, BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(Context.getOrCreate(params), wallet, blockStore, validHashStore);
+    }
     /**
      * Constructs a BlockChain that has no wallet at all. This is helpful when you don't actually care about sending
      * and receiving coins but rather, just want to explore the network data structures.
      */
+    public BlockChain(Context context, BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(context, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
+    }
+
+    /** See {@link #BlockChain(Context, BlockStore, ValidHashStore)} */
     public BlockChain(NetworkParameters params, BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
         this(params, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
     }
@@ -60,14 +70,26 @@ public class BlockChain extends AbstractBlockChain {
     /**
      * Constructs a BlockChain connected to the given list of listeners and a store.
      */
-    public BlockChain(NetworkParameters params, List<BlockChainListener> wallets,
+    public BlockChain(Context context, List<BlockChainListener> wallets,
                       BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
-        super(params, wallets, blockStore, validHashStore);
+        super(context, wallets, blockStore, validHashStore);
         this.blockStore = blockStore;
     }
 
+    /** See {@link #BlockChain(Context, List, BlockStore, ValidHashStore)} */
+    public BlockChain(NetworkParameters params, List<BlockChainListener> wallets, BlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(Context.getOrCreate(params), wallets, blockStore, validHashStore);
+    }
     @Override
     protected StoredBlock addToBlockStore(StoredBlock storedPrev, Block blockHeader, TransactionOutputChanges txOutChanges)
+            throws BlockStoreException, VerificationException {
+        StoredBlock newBlock = storedPrev.build(blockHeader);
+        blockStore.put(newBlock);
+        return newBlock;
+    }
+
+    @Override
+    protected StoredBlock addToBlockStore(StoredBlock storedPrev, Block blockHeader)
             throws BlockStoreException, VerificationException {
         StoredBlock newBlock = storedPrev.build(blockHeader);
         blockStore.put(newBlock);
@@ -97,14 +119,6 @@ public class BlockChain extends AbstractBlockChain {
         } finally {
             lock.unlock();
         }
-    }
-    
-    @Override
-    protected StoredBlock addToBlockStore(StoredBlock storedPrev, Block blockHeader)
-            throws BlockStoreException, VerificationException {
-        StoredBlock newBlock = storedPrev.build(blockHeader);
-        blockStore.put(newBlock);
-        return newBlock;
     }
 
     @Override

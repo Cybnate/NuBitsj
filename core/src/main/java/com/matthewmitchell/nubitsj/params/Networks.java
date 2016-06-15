@@ -17,25 +17,26 @@
 package com.matthewmitchell.nubitsj.params;
 
 import com.google.common.collect.Lists;
+import com.matthewmitchell.nubitsj.core.CoinDetails;
 import com.matthewmitchell.nubitsj.core.NetworkParameters;
 import java.util.Collection;
 import java.util.List;
 
 /**
- * Utility class that holds all the registered NetworkParameters types used for Address auto discovery.
+ * Utility class that holds all the registered CoinDetails types used for Address auto discovery.
  * By default only MainNetParams is used. 
  */
 public class Networks {
     /** Registered networks */
-    private static List<NetworkParameters> networks = Lists.newArrayList((NetworkParameters)MainNetParams.get());
+    private static final List<CoinDetails> networks = Lists.newArrayList((CoinDetails) MainNetParams.get());
 
-    public static List<NetworkParameters> get() {
+    public static List<CoinDetails> get() {
         return networks;
     }
 
-    public static NetworkParameters get(String id) {
+    public static CoinDetails get(String id) {
 
-        for (NetworkParameters network: networks) {
+        for (CoinDetails network: networks) {
             if (network.getId().equals(id))
                 return network;
         }
@@ -43,15 +44,15 @@ public class Networks {
 
     }
 
-    public static void register(NetworkParameters network) {
+    public static void register(CoinDetails network) {
         register(Lists.newArrayList(network));
     }
 
-    public static void register(Collection<? extends NetworkParameters> networks) {
+    public static void register(Collection<? extends CoinDetails> networks) {
         Networks.networks.addAll(networks);
     }
 
-    public static void unregister(NetworkParameters network) {
+    public static void unregister(CoinDetails network) {
         networks.remove(network);
     }
 

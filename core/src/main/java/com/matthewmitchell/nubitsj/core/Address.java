@@ -1,5 +1,7 @@
 /**
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Giannis Dzegoutanis
+ * Copyright 2015 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +18,17 @@
 
 package com.matthewmitchell.nubitsj.core;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import com.matthewmitchell.nubitsj.params.Networks;
 import com.matthewmitchell.nubitsj.script.Script;
+import javax.annotation.Nullable;
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import javax.annotation.Nullable;
 
 /**
  * <p>A Nubits address looks like 1MsScoe2fTJoq4ZPdQgqyhgWeoNamYPevy and is derived from an elliptic curve public key
@@ -42,25 +47,25 @@ public class Address extends VersionedChecksummedBytes {
      */
     public static final int LENGTH = 20;
 
-    transient final List<NetworkParameters> params;
+    private transient List<CoinDetails> coinDetails;
 
     /**
      * Construct an address from a list of parameters, the address version, and the hash160 form. Example:<p>
      *
      * <pre>new Address(Arrays.asList(NetworkParameters.prodNet()), NetworkParameters.getAddressHeader(), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
      */
-    public Address(List<NetworkParameters> paramsList, int version, byte[] hash160) throws WrongNetworkException {
+    public Address(List<CoinDetails> coinList, int version, byte[] hash160) throws WrongNetworkException {
 
         super(version, hash160);
-        checkNotNull(paramsList);
+        checkNotNull(coinList);
         checkArgument(hash160.length == 20, "Addresses are 160-bit hashes, so you must provide 20 bytes");
 
-        for (NetworkParameters params: paramsList) {
-            if (!isAcceptableVersion(params, version))
-                throw new WrongNetworkException(version, params.getAcceptableAddressCodes());
+        for (CoinDetails coin: coinList) {
+            if (!isAcceptableVersion(coin, version))
+                throw new WrongNetworkException(version, coin.getAcceptableAddressCodes());
         }
 
-        this.params = paramsList;
+        this.coinDetails = coinList;
 
     }
 
@@ -69,8 +74,8 @@ public class Address extends VersionedChecksummedBytes {
      *
      * <pre>new Address(NetworkParameters.prodNet(), NetworkParameters.getAddressHeader(), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
      */
-    public Address(NetworkParameters params, int version, byte[] hash160) throws WrongNetworkException {
-        this(Arrays.asList(params), version, hash160);	
+    public Address(CoinDetails coinDetails, int version, byte[] hash160) throws WrongNetworkException {
+        this(Arrays.asList(coinDetails), version, hash160);	
     }
 
     /** Returns an Address that represents the given P2SH script hash. */
@@ -93,14 +98,14 @@ public class Address extends VersionedChecksummedBytes {
      *
      * <pre>new Address(Arrays.asList(NetworkParameters.prodNet()), Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));</pre>
      */
-    public Address(List<NetworkParameters> params, byte[] hash160) {
-        super(params.get(0).getAddressHeader(), hash160);
+    public Address(List<CoinDetails> coinList, byte[] hash160) {
+        super(coinList.get(0).getAddressHeader(), hash160);
         checkArgument(hash160.length == 20, "Addresses are 160-bit hashes, so you must provide 20 bytes");
-        this.params = params;
+        this.coinDetails = coinList;
     }
 
-    public Address(NetworkParameters params, byte[] hash160) {
-        this(Arrays.asList(params), hash160);
+    public Address(CoinDetails coinDetails, byte[] hash160) {
+        this(Arrays.asList(coinDetails), hash160);
     }
 
     /**
@@ -113,30 +118,32 @@ public class Address extends VersionedChecksummedBytes {
      * @throws AddressFormatException if the given address doesn't parse or the checksum is invalid
      * @throws WrongNetworkException if the given address is valid but for a different chain (eg testnet vs prodnet)
      */
-    public Address(@Nullable List<NetworkParameters> paramsList, String address) throws AddressFormatException {
+    public Address(@Nullable List<CoinDetails> coinList, String address) throws AddressFormatException {
+        
         super(address);
-        if (paramsList != null) {
+        
+        if (coinList != null) {
 
-            for (NetworkParameters params: paramsList) {
-                if (!isAcceptableVersion(params, version)) {
-                    throw new WrongNetworkException(version, params.getAcceptableAddressCodes());
+            for (CoinDetails coin: coinList) {
+                if (!isAcceptableVersion(coin, version)) {
+                    throw new WrongNetworkException(version, coin.getAcceptableAddressCodes());
                 }
             }
 
-            this.params = paramsList;
+            this.coinDetails = coinList;
 
         } else {
 
-            ArrayList<NetworkParameters> paramsFound = new ArrayList<NetworkParameters>();
+            ArrayList<CoinDetails> coinsFound = new ArrayList<CoinDetails>();
 
-            for (NetworkParameters p : Networks.get())
+            for (CoinDetails p : Networks.get())
                 if (isAcceptableVersion(p, version))
-                    paramsFound.add(p);
+                    coinsFound.add(p);
 
-            if (paramsFound.isEmpty())
+            if (coinsFound.isEmpty())
                 throw new AddressFormatException("No network found for " + address);
 
-            this.params = paramsFound;
+            this.coinDetails = coinsFound;
 
         }
     }
@@ -151,7 +158,7 @@ public class Address extends VersionedChecksummedBytes {
      * @throws WrongNetworkException if the given address is valid but for a different chain (eg testnet vs prodnet)
      */
     public Address(String address) throws AddressFormatException {
-        this((List<NetworkParameters>) null, address);
+        this((List<CoinDetails>) null, address);
     }
 
     /**
@@ -164,8 +171,8 @@ public class Address extends VersionedChecksummedBytes {
      * @throws AddressFormatException if the given address doesn't parse or the checksum is invalid
      * @throws WrongNetworkException if the given address is valid but for a different chain (eg testnet vs prodnet)
      */
-    public Address(@Nullable NetworkParameters params, String address) throws AddressFormatException {
-        this(params == null ? null : Arrays.asList(params), address);
+    public Address(@Nullable CoinDetails coinDetails, String address) throws AddressFormatException {
+        this(coinDetails == null ? null : Arrays.asList(coinDetails), address);
     }
 
     /** The (big endian) 20 byte hash that is the core of a Nubits address. */
@@ -177,65 +184,98 @@ public class Address extends VersionedChecksummedBytes {
      * Returns true if this address is a Pay-To-Script-Hash (P2SH) address for the given network.
      * See also https://github.com.matthewmitchell/bips/blob/master/bip-0013.mediawiki: Address Format for pay-to-script-hash
      */
-    public boolean isP2SHAddress(NetworkParameters params) {
+    public boolean isP2SHAddress(CoinDetails params) {
         return params != null && this.version == params.p2shHeader;
     }
 
     public boolean isSelectedP2SHAddress() {
-        return isP2SHAddress(params.get(0));
+        return isP2SHAddress(coinDetails.get(0));
     }
 
     /**
-     * Examines the version byte of the address and attempts to find the matching NetworkParameters. If you aren't sure
-     * which network the address is intended for (eg, it was provided by a user), you can use this to decide if it is
-     * compatible with the current wallet. You should be able to handle a null response from this method. Note that the
-     * parameters returned is not necessarily the same as the one the Address was created with.
+     * Returns a list of CoinDetails. If you aren't sure which coin the address is intended for (eg, it was provided by
+     * a user), you can use this to decide if it is compatible with the current wallet. You should be able to handle a 
+     * null response from this method. 
      *
-     * @return a list of NetworkParameters representing the networks the address is intended for, or null if unknown.
+     * @return a list of CoinDetails representing the coins the address is intended for, or null if unknown.
      */
-    public List<NetworkParameters> getParameters() {
-        return params;
+    public List<CoinDetails> getCoinDetails() {
+        return coinDetails;
     }
 
     /**
-     * Examines the version byte of the address and attempts to find the matching NetworkParameters. This is similar to
-     * getParameters() but returns the first NetworkParameters in the list.
+     * Examines the version byte of the address and attempts to find the matching CoinDetails. This is similar to
+     * getCoinDetails() but returns the first NetworkParameters in the list.
      *
-     * @return a NetworkParameters representing the network the address is intended for, or null if unknown.
+     * @return a CoinDetails representing the coin the address is intended for, or null if unknown.
      */
-    public NetworkParameters getSelectedParameters() {
+    public CoinDetails getSelectedCoinDetails() {
 
-        if (params == null)
+        if (coinDetails == null)
             return null;
 
-        return params.get(0);
+        return coinDetails.get(0);
 
     }
 
     /**
-     * Given an address, examines the version byte and attempts to find matching NetworkParameters. If you aren't sure
-     * which network the address is intended for (eg, it was provided by a user), you can use this to decide if it is
+     * Given an address, examines the version byte and attempts to find matching CoinDetails. If you aren't sure
+     * which coins the address is intended for (eg, it was provided by a user), you can use this to decide if it is
      * compatible with the current wallet.
-     * @return a NetworkParameters or null if the string wasn't of a known version.
+     * @return A list of CoinDetails or null if the string wasn't of a known version.
      */
     @Nullable
-    public static List<NetworkParameters> getParametersFromAddress(String address) throws AddressFormatException {
+    public static List<CoinDetails> getCoinsFromAddress(String address) throws AddressFormatException {
         try {
-            return new Address(address).getParameters();
+            return new Address(address).getCoinDetails();
         } catch (WrongNetworkException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
     }
 
     /**
-     * Check if a given address version is valid given the NetworkParameters.
+     * Check if a given address version is valid given the CoinDetails.
      */
-    private static boolean isAcceptableVersion(NetworkParameters params, int version) {
-        for (int v : params.getAcceptableAddressCodes()) {
+    private static boolean isAcceptableVersion(CoinDetails coinDetails, int version) {
+        for (int v : coinDetails.getAcceptableAddressCodes()) {
             if (version == v) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * This implementation narrows the return type to <code>Address</code>.
+     */
+    @Override
+    public Address clone() throws CloneNotSupportedException {
+        return (Address) super.clone();
+    }
+
+    // Java serialization
+
+    private void writeObject(ObjectOutputStream out) throws IOException {
+
+        out.defaultWriteObject();
+        out.writeInt(coinDetails.size());
+        for (CoinDetails paramsX: coinDetails)
+            out.writeUTF(paramsX.id);
+
+    }
+
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+
+        in.defaultReadObject();
+        
+        int paramNum = in.readInt();
+        
+        coinDetails = new ArrayList(paramNum);
+        
+        for (int x = 0; x < paramNum; x++)
+            coinDetails.add(
+                Networks.get(in.readUTF())
+            );
+
     }
 }

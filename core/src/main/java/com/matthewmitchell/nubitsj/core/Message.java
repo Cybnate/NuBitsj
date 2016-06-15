@@ -34,28 +34,28 @@ public abstract class Message implements Serializable {
     private static final Logger log = LoggerFactory.getLogger(Message.class);
     private static final long serialVersionUID = -3561053461717079135L;
 
-    public static final int MAX_SIZE = 0x02000000;
+    public static final int MAX_SIZE = 0x02000000; // 32MB
 
     public static final int UNKNOWN_LENGTH = Integer.MIN_VALUE;
 
     // Useful to ensure serialize/deserialize are consistent with each other.
     private static final boolean SELF_CHECK = false;
 
-    // The offset is how many payload into the provided byte array this message starts at.
+    // The offset is how many bytes into the provided byte array this message payload starts at.
     protected transient int offset;
     // The cursor keeps track of where we are in the byte array as we parse it.
-    // Note that it's relative to the start of the array NOT the start of the message.
+    // Note that it's relative to the start of the array NOT the start of the message payload.
     protected transient int cursor;
 
     protected transient int length = UNKNOWN_LENGTH;
 
-    // The raw message payload themselves.
+    // The raw message payload bytes themselves.
     protected transient byte[] payload;
 
     protected transient boolean parsed = false;
     protected transient boolean recached = false;
-    protected transient final boolean parseLazy;
-    protected transient final boolean parseRetain;
+    protected final transient boolean parseLazy;
+    protected final transient boolean parseRetain;
 
     protected transient int protocolVersion;
 
@@ -93,8 +93,8 @@ public abstract class Message implements Serializable {
      * @param parseLazy Whether to perform a full parse immediately or delay until a read is requested.
      * @param parseRetain Whether to retain the backing byte array for quick reserialization.  
      * If true and the backing byte array is invalidated due to modification of a field then 
-     * the cached payload may be repopulated and retained if the message is serialized again in the future.
-     * @param length The length of message if known.  Usually this is provided when deserializing of the wire
+     * the cached bytes may be repopulated and retained if the message is serialized again in the future.
+     * @param length The length of message payload if known.  Usually this is provided when deserializing of the wire
      * as the length will be provided as part of the header.  If unknown then set to Message.UNKNOWN_LENGTH
      * @throws ProtocolException
      */
@@ -145,7 +145,7 @@ public abstract class Message implements Serializable {
         this(params, payload, offset, NetworkParameters.PROTOCOL_VERSION, false, false, UNKNOWN_LENGTH);
     }
 
-    Message(NetworkParameters params, byte[] payload, int offset, boolean parseLazy, final boolean parseRetain, int length) throws ProtocolException {
+    Message(NetworkParameters params, byte[] payload, int offset, boolean parseLazy, boolean parseRetain, int length) throws ProtocolException {
         this(params, payload, offset, NetworkParameters.PROTOCOL_VERSION, parseLazy, parseRetain, length);
     }
 
@@ -156,7 +156,7 @@ public abstract class Message implements Serializable {
     abstract void parse() throws ProtocolException;
 
     /**
-     * Perform the most minimal parse possible to calculate the length of the message.
+     * Perform the most minimal parse possible to calculate the length of the message payload.
      * This is only required for subclasses of ChildMessage as root level messages will have their length passed
      * into the constructor.
      * <p/>
@@ -229,7 +229,7 @@ public abstract class Message implements Serializable {
             return;
         }
         length += adjustment;
-        // Check if we will need more payload to encode the length prefix.
+        // Check if we will need more bytes to encode the length prefix.
         if (newArraySize == 1)
             length++;  // The assumption here is we never call adjustLength with the same arraySize as before.
         else if (newArraySize != 0)
@@ -295,7 +295,7 @@ public abstract class Message implements Serializable {
      * <ol>
      * <li>1) The message was parsed from a byte array with parseRetain = true</li>
      * <li>2) The message has not been modified</li>
-     * <li>3) The array had an offset of 0 and no surplus payload</li>
+     * <li>3) The array had an offset of 0 and no surplus bytes</li>
      * </ol>
      *
      * If condition 3 is not met then an copy of the relevant portion of the array will be returned.
@@ -329,7 +329,7 @@ public abstract class Message implements Serializable {
         if (parseRetain) {
             // A free set of steak knives!
             // If there happens to be a call to this method we gain an opportunity to recache
-            // the byte array and in this case it contains no payload from parent messages.
+            // the byte array and in this case it contains no bytes from parent messages.
             // This give a dual benefit.  Releasing references to the larger byte array so that it
             // it is more likely to be GC'd.  And preventing double serializations.  E.g. calculating
             // merkle root calls this method.  It is will frequently happen prior to serializing the block
@@ -406,20 +406,6 @@ public abstract class Message implements Serializable {
         }
     }
 
-    Sha256Hash readHash() throws ProtocolException {
-        try {
-            byte[] hash = new byte[32];
-            System.arraycopy(payload, cursor, hash, 0, 32);
-            // We have to flip it around, as it's been read off the wire in little endian.
-            // Not the most efficient way to do this but the clearest.
-            hash = Utils.reverseBytes(hash);
-            cursor += 32;
-            return new Sha256Hash(hash);
-        } catch (IndexOutOfBoundsException e) {
-            throw new ProtocolException(e);
-        }
-    }
-
     long readInt64() throws ProtocolException {
         try {
             long u = Utils.readInt64(payload, cursor);
@@ -431,16 +417,8 @@ public abstract class Message implements Serializable {
     }
 
     BigInteger readUint64() throws ProtocolException {
-        try {
-            // Java does not have an unsigned 64 bit type. So scrape it off the wire then flip.
-            byte[] valbytes = new byte[8];
-            System.arraycopy(payload, cursor, valbytes, 0, 8);
-            valbytes = Utils.reverseBytes(valbytes);
-            cursor += valbytes.length;
-            return new BigInteger(valbytes);
-        } catch (IndexOutOfBoundsException e) {
-            throw new ProtocolException(e);
-        }
+        // Java does not have an unsigned 64 bit type. So scrape it off the wire then flip.
+        return new BigInteger(Utils.reverseBytes(readBytes(8)));
     }
 
     long readVarInt() throws ProtocolException {
@@ -460,7 +438,7 @@ public abstract class Message implements Serializable {
 
     byte[] readBytes(int length) throws ProtocolException {
         if (length > MAX_SIZE) {
-            throw new ProtocolException("Claimed byte array length too large: " + length);
+            throw new ProtocolException("Claimed value length too large: " + length);
         }
         try {
             byte[] b = new byte[length];
@@ -478,29 +456,14 @@ public abstract class Message implements Serializable {
     }
 
     String readStr() throws ProtocolException {
-        try {
-            VarInt varInt = new VarInt(payload, cursor);
-            if (varInt.value == 0) {
-                cursor += 1;
-                return "";
-            }
-            cursor += varInt.getOriginalSizeInBytes();
-            if (varInt.value > MAX_SIZE) {
-                throw new ProtocolException("Claimed var_str length too large: " + varInt.value);
-            }
-            byte[] characters = new byte[(int) varInt.value];
-            System.arraycopy(payload, cursor, characters, 0, characters.length);
-            cursor += characters.length;
-            try {
-                return new String(characters, "UTF-8");
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);  // Cannot happen, UTF-8 is always supported.
-            }
-        } catch (ArrayIndexOutOfBoundsException e) {
-            throw new ProtocolException(e);
-        } catch (IndexOutOfBoundsException e) {
-            throw new ProtocolException(e);
-        }
+        long length = readVarInt();
+        return length == 0 ? "" : Utils.toString(readBytes((int) length), "UTF-8"); // optimization for empty strings
+    }
+
+    Sha256Hash readHash() throws ProtocolException {
+        // We have to flip it around, as it's been read off the wire in little endian.
+        // Not the most efficient way to do this but the clearest.
+        return Sha256Hash.wrapReversed(readBytes(32));
     }
     
     boolean hasMoreBytes() {

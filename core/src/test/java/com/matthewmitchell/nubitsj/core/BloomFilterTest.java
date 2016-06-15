@@ -17,7 +17,6 @@
 
 package com.matthewmitchell.nubitsj.core;
 
-import com.matthewmitchell.nubitsj.core.Address;
 import com.matthewmitchell.nubitsj.params.MainNetParams;
 import com.matthewmitchell.nubitsj.wallet.KeyChainGroup;
 import org.junit.Test;

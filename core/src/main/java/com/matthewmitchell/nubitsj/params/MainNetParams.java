@@ -1,5 +1,6 @@
 /*
  * Copyright 2013 Google Inc.
+ * Copyright 2015 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +17,18 @@
 
 package com.matthewmitchell.nubitsj.params;
 
-import com.matthewmitchell.nubitsj.core.NetworkParameters;
-import com.matthewmitchell.nubitsj.core.Sha256Hash;
-import com.matthewmitchell.nubitsj.core.Utils;
+import com.matthewmitchell.nubitsj.core.*;
+import com.matthewmitchell.nubitsj.net.discovery.*;
 
-import static com.google.common.base.Preconditions.checkState;
+import java.net.*;
+
+import static com.google.common.base.Preconditions.*;
 
 /**
  * Parameters for the main production network on which people trade goods and services.
  */
-public class MainNetParams extends NetworkParameters {
+public class MainNetParams extends AbstractNubitsNetParams {
+
     public MainNetParams() {
         super();
         interval = INTERVAL;
@@ -36,6 +39,9 @@ public class MainNetParams extends NetworkParameters {
         acceptableAddressCodes = new int[] { addressHeader, p2shHeader };
         port = 7890;
         packetMagic= 0xe6e8e9e5L;
+        bip32HeaderPub = 0x0488B21E; //The 4 byte header that serializes in base58 to "xpub".
+        bip32HeaderPriv = 0x0488ADE4; //The 4 byte header that serializes in base58 to "xprv"
+        
         genesisBlock.setDifficultyTarget(0x1e0fffffL);
         genesisBlock.setTime(1407023435);
         genesisBlock.setNonce(1542387L);
@@ -52,7 +58,9 @@ public class MainNetParams extends NetworkParameters {
 
         dnsSeeds = new String[] {
             "nuseed.coinerella.com",
+            "nuseed.nubitsexplorer.nu"
         };
+
     }
 
     private static MainNetParams instance;
@@ -66,11 +74,6 @@ public class MainNetParams extends NetworkParameters {
     @Override
     public String getPaymentProtocolId() {
         return PAYMENT_PROTOCOL_ID_MAINNET;
-    }
-
-    @Override
-    public String toString() {
-        return "NuBits";
     }
 
 }

@@ -127,6 +127,21 @@ public class MonetaryFormatTest {
     }
 
     @Test
+    public void customCode() throws Exception {
+        assertEquals("dNBT 0.00", MonetaryFormat.NBT.repeatOptionalDecimals(1, 1).code(1, "dNBT").shift(1).format(Coin.ZERO).toString());
+    }
+
+    /**
+     * Test clearing all codes, and then setting codes after clearing.
+     */
+    @Test
+    public void noCode() throws Exception {
+        assertEquals("0.00", MonetaryFormat.NBT.noCode().shift(0).format(Coin.ZERO).toString());
+        // Ensure that inserting a code after codes are wiped, works
+        assertEquals("dNBT 0.00", MonetaryFormat.NBT.noCode().repeatOptionalDecimals(1, 1).code(1, "dNBT").shift(1).format(Coin.ZERO).toString());
+    }
+
+    @Test
     public void codeOrientation() throws Exception {
         assertEquals("NBT 0.00", MonetaryFormat.NBT.prefixCode().format(Coin.ZERO).toString());
         assertEquals("0.00 NBT", MonetaryFormat.NBT.postfixCode().format(Coin.ZERO).toString());

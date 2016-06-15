@@ -16,10 +16,7 @@
 
 package com.matthewmitchell.nubitsj.testing;
 
-import com.matthewmitchell.nubitsj.core.Transaction;
-import com.matthewmitchell.nubitsj.core.TransactionBroadcaster;
-import com.matthewmitchell.nubitsj.core.VerificationException;
-import com.matthewmitchell.nubitsj.core.Wallet;
+import com.matthewmitchell.nubitsj.core.*;
 import com.matthewmitchell.nubitsj.utils.Threading;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -70,7 +67,7 @@ public class MockTransactionBroadcaster implements TransactionBroadcaster {
     }
 
     @Override
-    public SettableFuture<Transaction> broadcastTransaction(Transaction tx) {
+    public TransactionBroadcast broadcastTransaction(Transaction tx) {
         // Use a lock just to catch lock ordering inversions e.g. wallet->broadcaster.
         lock.lock();
         try {
@@ -90,7 +87,7 @@ public class MockTransactionBroadcaster implements TransactionBroadcaster {
                 public void onFailure(Throwable t) {
                 }
             });
-            return result;
+            return TransactionBroadcast.createMockBroadcast(tx, result);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {

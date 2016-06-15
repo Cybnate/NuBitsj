@@ -50,6 +50,7 @@ public class TestWithWallet {
     public void setUp() throws Exception {
         BriefLogFormatter.init();
         Wallet.SendRequest.DEFAULT_FEE_PER_KB = Coin.ZERO;
+        Context ctx = new Context(params);
         wallet = new Wallet(params, hashStore);
         myKey = wallet.currentReceiveKey();
         myAddress = myKey.toAddress(params);

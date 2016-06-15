@@ -398,7 +398,7 @@ import java.util.regex.Pattern;
  * {@link NbtAutoFormat} configured with applicable non-default pattern) will recognize a
  * variety of currency symbols and codes, including all standard international (metric)
  * prefixes from micro to mega.  Additionally, if either or both of a custom currency code or 
- * symbol is configured using {@link NbtFormat.Builder#code()} or {@link NbtFormat.Builder.code()}, 
+ * symbol is configured using {@link NbtFormat.Builder#code} or {@link NbtFormat.Builder.code}, 
  * then such code or symbol will be recognized in addition to those recognized by default..
  *
  * <p>Instances of this class that recognize currency signs will recognize both currency
@@ -663,7 +663,8 @@ public abstract class NbtFormat extends Format {
         public Builder pattern(String val) {
             if (localizedPattern != "")
                 throw new IllegalStateException("You cannot invoke both pattern() and localizedPattern()");
-            pattern = val; return this;
+            pattern = val;
+            return this;
         } 
 
         /** Use the given localized-pattern for formatting and parsing.  The format of this
@@ -913,7 +914,7 @@ public abstract class NbtFormat extends Format {
         for (int e : elements) {
             checkArgument(e > 0, "Size of decimal group must be at least one.");
             list.add(e);
-        };
+        }
         return list;
     }
 
@@ -1066,8 +1067,7 @@ public abstract class NbtFormat extends Format {
      * @throws IllegalArgumentException if the number of fraction places is negative.
      */
     public String format(Object qty, int minDecimals, int... fractionGroups) {
-        return format(qty, new StringBuffer(), new FieldPosition(0), minDecimals, boxAsList(fractionGroups)).
-               toString();
+        return format(qty, new StringBuffer(), new FieldPosition(0), minDecimals, boxAsList(fractionGroups)).toString();
     }
 
     /**
@@ -1140,7 +1140,7 @@ public abstract class NbtFormat extends Format {
      *  @return The minimum and maximum fractional places settings that the
      *          formatter had before this change, as an ImmutableList. */
     private static ImmutableList<Integer> setFormatterDigits(DecimalFormat formatter, int min, int max) {
-        ImmutableList<Integer> ante = ImmutableList.<Integer>of(
+        ImmutableList<Integer> ante = ImmutableList.of(
             formatter.getMinimumFractionDigits(),
             formatter.getMaximumFractionDigits()
         );
@@ -1156,7 +1156,7 @@ public abstract class NbtFormat extends Format {
      *  @param unitCount      the number of monetary units to be formatted
      *  @param scale          the denomination of those units as the decimal-place shift from coins
      *  @param minDecimals    the minimum number of fractional decimal places
-     *  @param fractiongroups the sizes of option fractional decimal-place groups
+     *  @param fractionGroups the sizes of option fractional decimal-place groups
      */
     private static int calculateFractionPlaces(
         BigDecimal unitCount, int scale, int minDecimals, List<Integer> fractionGroups)
@@ -1289,7 +1289,7 @@ public abstract class NbtFormat extends Format {
      */
     protected static void prefixUnitsIndicator(DecimalFormat numberFormat, int scale) {
         assert Thread.holdsLock(numberFormat); // make sure caller intends to reset before changing
-        DecimalFormatSymbols fs = (DecimalFormatSymbols)numberFormat.getDecimalFormatSymbols();
+        DecimalFormatSymbols fs = numberFormat.getDecimalFormatSymbols();
         setSymbolAndCode(numberFormat,
             prefixSymbol(fs.getCurrencySymbol(), scale), prefixCode(fs.getInternationalCurrencySymbol(), scale)
         );
@@ -1447,13 +1447,13 @@ public abstract class NbtFormat extends Format {
 
     /** Return a representation of the pattern used by this instance for formatting and
      *  parsing.  The format is similar to, but not the same as the format recognized by the
-     *  {@link Builder.pattern()} and {@link Builder.localizedPattern()} methods.  The pattern
+     *  {@link Builder#pattern} and {@link Builder#localizedPattern} methods.  The pattern
      *  returned by this method is localized, any currency signs expressed are literally, and
      *  optional fractional decimal places are shown grouped in parentheses. */
     public String pattern() { synchronized(numberFormat) {
-        StringBuffer groups = new StringBuffer();
+        StringBuilder groups = new StringBuilder();
         for (int group : decimalGroups) {
-            groups.append("(" + Strings.repeat("#",group) + ")");
+            groups.append("(").append(Strings.repeat("#", group)).append(")");
         }
         DecimalFormatSymbols s = numberFormat.getDecimalFormatSymbols();
         String digit = String.valueOf(s.getDigit());

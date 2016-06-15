@@ -51,7 +51,8 @@ public final class EncryptedData {
 
     @Override
     public String toString() {
-        return "EncryptedData [initialisationVector=" + Arrays.toString(initialisationVector) + ", encryptedPrivateKey=" + Arrays.toString(encryptedBytes) + "]";
+        return "EncryptedData [initialisationVector=" + Arrays.toString(initialisationVector)
+            + ", encryptedPrivateKey=" + Arrays.toString(encryptedBytes) + "]";
     }
 }
 

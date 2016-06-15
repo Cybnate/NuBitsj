@@ -17,6 +17,8 @@
 package com.matthewmitchell.nubitsj.testing;
 
 import com.matthewmitchell.nubitsj.core.*;
+import com.matthewmitchell.nubitsj.crypto.TransactionSignature;
+import com.matthewmitchell.nubitsj.script.ScriptBuilder;
 import com.matthewmitchell.nubitsj.store.BlockStore;
 import com.matthewmitchell.nubitsj.store.BlockStoreException;
 
@@ -43,7 +45,8 @@ public class FakeTxBuilder {
         TransactionOutput prevOut = new TransactionOutput(params, prevTx, value, to);
         prevTx.addOutput(prevOut);
         // Connect it.
-        t.addInput(prevOut);
+        t.addInput(prevOut).setScriptSig(ScriptBuilder.createInputScript(TransactionSignature.dummy()));
+        // Fake signature.
         // Serialize/deserialize to ensure internal state is stripped, as if it had been read from the wire.
         return roundTripTransaction(params, t);
     }
@@ -78,11 +81,11 @@ public class FakeTxBuilder {
     }
 
     /**
-     * Transaction[0] is a feeder transaction, supplying Nbt to Transaction[1]
+     * Transaction[0] is a feeder transaction, supplying NBT to Transaction[1]
      */
     public static Transaction[] createFakeTx(NetworkParameters params, Coin value,
                                              Address to, Address from) {
-        // Create fake TXes of sufficient realism to exercise the unit tests. This transaction send Nbt from the
+        // Create fake TXes of sufficient realism to exercise the unit tests. This transaction send NBT from the
         // from address, to the to address with to one to somewhere else to simulate change.
         Transaction t = new Transaction(params);
         TransactionOutput outputToMe = new TransactionOutput(params, t, value, to);
@@ -174,7 +177,6 @@ public class FakeTxBuilder {
                 tx.getConfidence().setSource(TransactionConfidence.Source.NETWORK);
                 b.addTransaction(tx);
             }
-            b.solve();
             BlockPair pair = new BlockPair();
             pair.block = b;
             pair.storedBlock = blockStore.getChainHead().build(b);
@@ -193,9 +195,7 @@ public class FakeTxBuilder {
     }
 
     public static Block makeSolvedTestBlock(BlockStore blockStore, Address coinsTo) throws BlockStoreException {
-        Block b = blockStore.getChainHead().getHeader().createNextBlock(coinsTo);
-        b.solve();
-        return b;
+        return blockStore.getChainHead().getHeader().createNextBlock(coinsTo);
     }
 
     public static Block makeSolvedTestBlock(Block prev, Transaction... transactions) throws BlockStoreException {
@@ -205,7 +205,6 @@ public class FakeTxBuilder {
         for (Transaction tx : transactions) {
             b.addTransaction(tx);
         }
-        b.solve();
         return b;
     }
 
@@ -215,7 +214,6 @@ public class FakeTxBuilder {
         for (Transaction tx : transactions) {
             b.addTransaction(tx);
         }
-        b.solve();
         return b;
     }
 }

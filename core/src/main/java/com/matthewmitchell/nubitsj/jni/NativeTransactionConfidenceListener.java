@@ -16,7 +16,6 @@
 
 package com.matthewmitchell.nubitsj.jni;
 
-import com.matthewmitchell.nubitsj.core.Transaction;
 import com.matthewmitchell.nubitsj.core.TransactionConfidence;
 
 /**
@@ -28,5 +27,5 @@ public class NativeTransactionConfidenceListener implements TransactionConfidenc
     public long ptr;
 
     @Override
-    public native void onConfidenceChanged(Transaction tx, ChangeReason reason);
+    public native void onConfidenceChanged(TransactionConfidence confidence, ChangeReason reason);
 }

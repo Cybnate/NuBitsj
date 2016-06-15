@@ -1,7 +1,7 @@
 package com.matthewmitchell.nubitsj.uri;
 
 /**
- * <p>Exception to provide the following to {@link org.multibit.qrcode.NubitsURI}:</p>
+ * <p>Exception to provide the following to {@link com.matthewmitchell.nubitsj.uri.NubitsURI}:</p>
  * <ul>
  * <li>Provision of parsing error messages</li>
  * </ul>

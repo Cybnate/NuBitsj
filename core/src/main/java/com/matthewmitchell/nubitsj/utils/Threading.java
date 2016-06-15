@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Uninterruptibles;
 
+import com.matthewmitchell.nubitsj.core.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,6 +89,9 @@ public class Threading {
 
     public static class UserThread extends Thread implements Executor {
         private static final Logger log = LoggerFactory.getLogger(UserThread.class);
+        // 10,000 pending tasks is entirely arbitrary and may or may not be appropriate for the device we're
+        // running on.
+        public static int WARNING_THRESHOLD = 10000;
         private LinkedBlockingQueue<Runnable> tasks;
 
         public UserThread() {
@@ -114,10 +118,13 @@ public class Threading {
 
         @Override
         public void execute(Runnable command) {
-            if (tasks.size() > 100) {
-                log.warn("User thread saturated, memory exhaustion may occur.");
-                log.warn("Check for deadlocked or slow event handlers. Sample tasks:");
-                for (Object task : tasks.toArray()) log.warn(task.toString());
+            final int size = tasks.size();
+            if (size == WARNING_THRESHOLD) {
+                log.warn(
+                    "User thread has {} pending tasks, memory exhaustion may occur.\n" +
+                    "If you see this message, check your memory consumption and see if it's problematic or excessively spikey.\n" +
+                    "If it is, check for deadlocked or slow event handlers. If it isn't, try adjusting the constant \n" +
+                    "Threading.UserThread.WARNING_THRESHOLD upwards until it's a suitable level for your app, or Integer.MAX_VALUE to disable." , size);
             }
             Uninterruptibles.putUninterruptibly(tasks, command);
         }
@@ -148,7 +155,10 @@ public class Threading {
     public static CycleDetectingLockFactory factory;
 
     public static ReentrantLock lock(String name) {
-        return factory.newReentrantLock(name);
+        if (Utils.isAndroidRuntime())
+            return new ReentrantLock(true);
+        else
+            return factory.newReentrantLock(name);
     }
 
     public static void warnOnLockCycles() {

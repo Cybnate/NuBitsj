@@ -1,18 +1,17 @@
 /*
  * Copyright 2012, 2014 the original author or authors.
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * 
  */
 
@@ -20,11 +19,9 @@ package com.matthewmitchell.nubitsj.uri;
 
 import com.matthewmitchell.nubitsj.core.Address;
 import com.matthewmitchell.nubitsj.params.MainNetParams;
-import com.matthewmitchell.nubitsj.uri.NubitsURI;
 import com.google.common.collect.ImmutableList;
 import org.junit.Test;
 
-import java.io.UnsupportedEncodingException;
 
 import static com.matthewmitchell.nubitsj.core.Coin.*;
 import static org.junit.Assert.*;
@@ -74,7 +71,7 @@ public class NubitsURITest {
 
     @Test
     public void testGood_Simple() throws NubitsURIParseException {
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS);
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS);
         assertNotNull(testObject);
         assertNull("Unexpected amount", testObject.getAmount());
         assertNull("Unexpected label", testObject.getLabel());
@@ -100,14 +97,14 @@ public class NubitsURITest {
     public void testBad_BadSyntax() {
         // Various illegal characters
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + "|" + MAINNET_GOOD_ADDRESS);
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + "|" + MAINNET_GOOD_ADDRESS);
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
             assertTrue(e.getMessage().contains("Bad URI syntax"));
         }
 
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS + "\\");
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS + "\\");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
             assertTrue(e.getMessage().contains("Bad URI syntax"));
@@ -115,7 +112,7 @@ public class NubitsURITest {
 
         // Separator without field
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":");
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
             assertTrue(e.getMessage().contains("Bad URI syntax"));
@@ -128,7 +125,7 @@ public class NubitsURITest {
     @Test
     public void testBad_Address() {
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME);
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME);
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
         }
@@ -140,7 +137,7 @@ public class NubitsURITest {
     @Test
     public void testBad_IncorrectAddressType() {
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_BAD_ADDRESS);
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_BAD_ADDRESS);
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
             assertTrue(e.getMessage().contains("Bad address"));
@@ -156,17 +153,17 @@ public class NubitsURITest {
     @Test
     public void testGood_Amount() throws NubitsURIParseException {
         // Test the decimal parsing
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=6543210.1234");
         assertEquals("65432101234", testObject.getAmount().toString());
 
         // Test the decimal parsing
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=.1234");
         assertEquals("1234", testObject.getAmount().toString());
 
         // Test the integer parsing
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=65432");
         assertEquals("654320000", testObject.getAmount().toString());
     }
@@ -179,7 +176,7 @@ public class NubitsURITest {
      */
     @Test
     public void testGood_Label() throws NubitsURIParseException {
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?label=Hello%20World");
         assertEquals("Hello World", testObject.getLabel());
     }
@@ -189,13 +186,12 @@ public class NubitsURITest {
      * 
      * @throws NubitsURIParseException
      *             If something goes wrong
-     * @throws UnsupportedEncodingException 
      */
     @Test
-    public void testGood_LabelWithAmpersandAndPlus() throws Exception {
+    public void testGood_LabelWithAmpersandAndPlus() throws NubitsURIParseException {
         String testString = "Hello Earth & Mars + Venus";
         String encodedLabel = NubitsURI.encodeURLString(testString);
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS + "?label="
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS + "?label="
                 + encodedLabel);
         assertEquals(testString, testObject.getLabel());
     }
@@ -205,14 +201,13 @@ public class NubitsURITest {
      * 
      * @throws NubitsURIParseException
      *             If something goes wrong
-     * @throws UnsupportedEncodingException 
      */
     @Test
-    public void testGood_LabelWithRussian() throws Exception {
+    public void testGood_LabelWithRussian() throws NubitsURIParseException {
         // Moscow in Russian in Cyrillic
         String moscowString = "\u041c\u043e\u0441\u043a\u0432\u0430";
         String encodedLabel = NubitsURI.encodeURLString(moscowString); 
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS + "?label="
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS + "?label="
                 + encodedLabel);
         assertEquals(moscowString, testObject.getLabel());
     }
@@ -225,7 +220,7 @@ public class NubitsURITest {
      */
     @Test
     public void testGood_Message() throws NubitsURIParseException {
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?message=Hello%20World");
         assertEquals("Hello World", testObject.getMessage());
     }
@@ -238,7 +233,7 @@ public class NubitsURITest {
      */
     @Test
     public void testGood_Combinations() throws NubitsURIParseException {
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=6543210&label=Hello%20World&message=Be%20well");
         assertEquals(
                 "NubitsURI['amount'='65432100000','label'='Hello World','message'='Be well','address'='BiM5wdu2apVnp17h6uZTWcNbbPE93sDeGs']",
@@ -255,7 +250,7 @@ public class NubitsURITest {
     public void testBad_Amount() throws NubitsURIParseException {
         // Missing
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                     + "?amount=");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
@@ -264,7 +259,7 @@ public class NubitsURITest {
 
         // Non-decimal (BIP 21)
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                     + "?amount=12X4");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
@@ -274,13 +269,13 @@ public class NubitsURITest {
 
     @Test
     public void testEmpty_Label() throws NubitsURIParseException {
-        assertNull(new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        assertNull(new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?label=").getLabel());
     }
 
     @Test
     public void testEmpty_Message() throws NubitsURIParseException {
-        assertNull(new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        assertNull(new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?message=").getMessage());
     }
 
@@ -293,7 +288,7 @@ public class NubitsURITest {
     @Test
     public void testBad_Duplicated() throws NubitsURIParseException {
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                     + "?address=aardvark");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
@@ -303,7 +298,7 @@ public class NubitsURITest {
 
     @Test
     public void testGood_ManyEquals() throws NubitsURIParseException {
-        assertEquals("aardvark=zebra", new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":"
+        assertEquals("aardvark=zebra", new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":"
                 + MAINNET_GOOD_ADDRESS + "?label=aardvark=zebra").getLabel());
     }
     
@@ -316,15 +311,15 @@ public class NubitsURITest {
     @Test
     public void testUnknown() throws NubitsURIParseException {
         // Unknown not required field
-        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?aardvark=true");
         assertEquals("NubitsURI['aardvark'='true','address'='BiM5wdu2apVnp17h6uZTWcNbbPE93sDeGs']", testObject.toString());
 
-        assertEquals("true", (String) testObject.getParameterByName("aardvark"));
+        assertEquals("true", testObject.getParameterByName("aardvark"));
 
         // Unknown not required field (isolated)
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                     + "?aardvark");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
@@ -333,7 +328,7 @@ public class NubitsURITest {
 
         // Unknown and required field
         try {
-            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+            testObject = new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                     + "?req-aardvark=true");
             fail("Expecting NubitsURIParseException");
         } catch (NubitsURIParseException e) {
@@ -345,26 +340,26 @@ public class NubitsURITest {
     public void brokenURIs() throws NubitsURIParseException {
         // Check we can parse the incorrectly formatted URIs produced by blockchain.info and its iPhone app.
         String str = "Nu://BiM5wdu2apVnp17h6uZTWcNbbPE93sDeGs?amount=0.01000000";
-        NubitsURI uri = new NubitsURI(str);
+        NubitsURI uri = new NubitsURI(MainNetParams.get(), str);
         assertEquals("BiM5wdu2apVnp17h6uZTWcNbbPE93sDeGs", uri.getAddress().toString());
         assertEquals(CENT, uri.getAmount());
     }
 
     @Test(expected = NubitsURIParseException.class)
     public void testBad_AmountTooPrecise() throws NubitsURIParseException {
-        new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=0.123456789");
     }
 
     @Test(expected = NubitsURIParseException.class)
     public void testBad_NegativeAmount() throws NubitsURIParseException {
-        new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=-1");
     }
 
     @Test(expected = NubitsURIParseException.class)
     public void testBad_TooLargeAmount() throws NubitsURIParseException {
-        new NubitsURI(MainNetParams.get(), NubitsURI.Nubits_SCHEME + ":" + MAINNET_GOOD_ADDRESS
+        new NubitsURI(MainNetParams.get(), NubitsURI.NUBITS_SCHEME + ":" + MAINNET_GOOD_ADDRESS
                 + "?amount=2000000000001");
     }
 

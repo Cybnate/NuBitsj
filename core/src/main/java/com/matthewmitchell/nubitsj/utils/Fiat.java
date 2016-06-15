@@ -25,7 +25,7 @@ import com.matthewmitchell.nubitsj.core.Monetary;
 import com.google.common.math.LongMath;
 
 /**
- * Represents a monetary fiat value. It was decided to not fold this into {@link Coin} because of type safety. Fiat
+ * Represents a monetary fiat value. It was decided to not fold this into {@link com.matthewmitchell.nubitsj.core.Coin} because of type safety. Fiat
  * values always come with an attached currency code.
  * 
  * This class is immutable.
@@ -76,15 +76,20 @@ public final class Fiat implements Monetary, Comparable<Fiat>, Serializable {
      * <p/>
      * This takes string in a format understood by {@link BigDecimal#BigDecimal(String)}, for example "0", "1", "0.10",
      * "1.23E3", "1234.5E-5".
-	 * 
-	 * Discards everything after 4 decimal places
+     * 
+     * Discards everything after 4 decimal places
      * 
      * @throws IllegalArgumentException
      *             if you try to specify fractional satoshis, or a value out of range.
      */
     public static Fiat parseFiat(final String currencyCode, final String str) {
-        return Fiat.valueOf(currencyCode, new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT)
-                .toBigInteger().longValue());
+        try {
+            long val = new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT)
+                    .toBigIntegerExact().longValue();
+            return Fiat.valueOf(currencyCode, val);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(e);
+        }
     }
 
     public Fiat add(final Fiat value) {

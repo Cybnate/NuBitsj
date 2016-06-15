@@ -22,6 +22,7 @@ import com.matthewmitchell.nubitsj.script.Script.VerifyFlag;
 import com.matthewmitchell.nubitsj.store.BlockStoreException;
 import com.matthewmitchell.nubitsj.store.FullPrunedBlockStore;
 import com.matthewmitchell.nubitsj.store.ValidHashStore;
+import com.matthewmitchell.nubitsj.utils.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +40,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 /**
  * <p>A FullPrunedBlockChain works in conjunction with a {@link FullPrunedBlockStore} to verify all the rules of the
- * Nubits system, with the downside being a larg cost in system resources. Fully verifying means all unspent transaction
+ * Nubits system, with the downside being a large cost in system resources. Fully verifying means all unspent transaction
  * outputs are stored. Once a transaction output is spent and that spend is buried deep enough, the data related to it
  * is deleted to ensure disk space usage doesn't grow forever. For this reason a pruning node cannot serve the full
  * block chain to other clients, but it nevertheless provides the same security guarantees as a regular Satoshi
@@ -58,29 +59,50 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
      * Constructs a BlockChain connected to the given wallet and store. To obtain a {@link Wallet} you can construct
      * one from scratch, or you can deserialize a saved wallet from disk using {@link Wallet#loadFromFile(java.io.File)}
      */
-    public FullPrunedBlockChain(NetworkParameters params, Wallet wallet, FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
-        this(params, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
-        if (wallet != null)
-            addWallet(wallet);
+    public FullPrunedBlockChain(Context context, Wallet wallet, FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(context, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
+        addWallet(wallet);
     }
 
     /**
-     * Constructs a BlockChain that has no wallet at all. This is helpful when you don't actually care about sending
-     * and receiving coins but rather, just want to explore the network data structures.
+     * Constructs a block chain connected to the given wallet and store. To obtain a {@link Wallet} you can construct
+     * one from scratch, or you can deserialize a saved wallet from disk using
+     * {@link Wallet#loadFromFile(java.io.File, WalletExtension...)}
+     */
+    public FullPrunedBlockChain(NetworkParameters params, Wallet wallet, FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(Context.getOrCreate(params), wallet, blockStore, validHashStore);
+    }
+
+    /**
+     * Constructs a block chain connected to the given store.
+     */
+    public FullPrunedBlockChain(Context context, FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(context, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
+    }
+
+    /**
+     * See {@link #FullPrunedBlockChain(Context, Wallet, FullPrunedBlockStore, ValidHashStore)}
      */
     public FullPrunedBlockChain(NetworkParameters params, FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
-        this(params, new ArrayList<BlockChainListener>(), blockStore, validHashStore);
+        this(Context.getOrCreate(params), blockStore, validHashStore);
     }
 
     /**
-     * Constructs a BlockChain connected to the given list of wallets and a store.
+     * Constructs a block chain connected to the given list of wallets and a store.
      */
-    public FullPrunedBlockChain(NetworkParameters params, List<BlockChainListener> listeners,
-                                FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
-        super(params, listeners, blockStore, validHashStore);
+    public FullPrunedBlockChain(Context context, List<BlockChainListener> listeners, FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        super(context, listeners, blockStore, validHashStore);
         this.blockStore = blockStore;
         // Ignore upgrading for now
         this.chainHead = blockStore.getVerifiedChainHead();
+    }
+
+    /**
+     * See {@link #FullPrunedBlockChain(Context, List, FullPrunedBlockStore)}
+     */
+    public FullPrunedBlockChain(NetworkParameters params, List<BlockChainListener> listeners,
+                                FullPrunedBlockStore blockStore, ValidHashStore validHashStore) throws BlockStoreException {
+        this(Context.getOrCreate(params), listeners, blockStore, validHashStore);
     }
 
     @Override
@@ -123,16 +145,21 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
     //TODO: Remove lots of duplicated code in the two connectTransactions
     
     // TODO: execute in order of largest transaction (by input count) first
-    ExecutorService scriptVerificationExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    ExecutorService scriptVerificationExecutor = Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors(), new ContextPropagatingThreadFactory("Script verification"));
 
-    /** A job submitted to the executor which verifies signatures. */
+    /**
+     * A job submitted to the executor which verifies signatures.
+     */
     private static class Verifier implements Callable<VerificationException> {
         final Transaction tx;
         final List<Script> prevOutScripts;
         final Set<VerifyFlag> verifyFlags;
 
         public Verifier(final Transaction tx, final List<Script> prevOutScripts, final Set<VerifyFlag> verifyFlags) {
-            this.tx = tx; this.prevOutScripts = prevOutScripts; this.verifyFlags = verifyFlags;
+            this.tx = tx;
+            this.prevOutScripts = prevOutScripts;
+            this.verifyFlags = verifyFlags;
         }
 
         @Nullable
@@ -149,6 +176,34 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
             return null;
         }
     }
+
+    /**
+     * Get the {@link Script} from the script bytes or return Script of empty byte array.
+     */
+    private Script getScript(byte[] scriptBytes) {
+        try {
+            return new Script(scriptBytes);
+        } catch (Exception e) {
+            return new Script(new byte[0]);
+        }
+    }
+
+    /**
+     * Get the address from the {@link Script} if it exists otherwise return empty string "".
+     *
+     * @param script The script.
+     * @return The address.
+     */
+    private String getScriptAddress(@Nullable Script script) {
+        String address = "";
+        try {
+            if (script != null) {
+                address = script.getToAddress(params, true).toString();
+            }
+        } catch (Exception e) {
+        }
+        return address;
+    }
     
     @Override
     protected TransactionOutputChanges connectTransactions(int height, Block block)
@@ -161,8 +216,8 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
 
         blockStore.beginDatabaseBatchWrite();
 
-        LinkedList<StoredTransactionOutput> txOutsSpent = new LinkedList<StoredTransactionOutput>();
-        LinkedList<StoredTransactionOutput> txOutsCreated = new LinkedList<StoredTransactionOutput>();  
+        LinkedList<UTXO> txOutsSpent = new LinkedList<UTXO>();
+        LinkedList<UTXO> txOutsCreated = new LinkedList<UTXO>();
         long sigOps = 0;
         final Set<VerifyFlag> verifyFlags = EnumSet.noneOf(VerifyFlag.class);
         if (block.getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME)
@@ -176,7 +231,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
             if (!params.isCheckpoint(height)) {
                 // BIP30 violator blocks are ones that contain a duplicated transaction. They are all in the
                 // checkpoints list and we therefore only check non-checkpoints for duplicated transactions here. See the
-                // BIP30 document for more details on this: https://github.com.matthewmitchell/bips/blob/master/bip-0030.mediawiki
+                // BIP30 document for more details on this: https://github.com/bitcoin/bips/blob/master/bip-0030.mediawiki
                 for (Transaction tx : block.transactions) {
                     Sha256Hash hash = tx.getHash();
                     // If we already have unspent outputs for this hash, we saw the tx already. Either the block is
@@ -197,27 +252,28 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     // outputs.
                     for (int index = 0; index < tx.getInputs().size(); index++) {
                         TransactionInput in = tx.getInputs().get(index);
-                        StoredTransactionOutput prevOut = blockStore.getTransactionOutput(in.getOutpoint().getHash(),
+                        UTXO prevOut = blockStore.getTransactionOutput(in.getOutpoint().getHash(),
                                                                                           in.getOutpoint().getIndex());
                         if (prevOut == null)
                             throw new VerificationException("Attempted to spend a non-existent or already spent output!");
                         // Coinbases can't be spent until they mature, to avoid re-orgs destroying entire transaction
                         // chains. The assumption is there will ~never be re-orgs deeper than the spendable coinbase
                         // chain depth.
-                        if (height - prevOut.getHeight() < params.getSpendableCoinbaseDepth())
-                            throw new VerificationException("Tried to spend coinbase at depth " + (height - prevOut.getHeight()));
+                        if (prevOut.isCoinbase()) {
+                            if (height - prevOut.getHeight() < params.getSpendableCoinbaseDepth()) {
+                                throw new VerificationException("Tried to spend coinbase at depth " + (height - prevOut.getHeight()));
+                            }
+                        }
                         // TODO: Check we're not spending the genesis transaction here. Satoshis code won't allow it.
                         valueIn = valueIn.add(prevOut.getValue());
                         if (verifyFlags.contains(VerifyFlag.P2SH)) {
-                            if (new Script(prevOut.getScriptBytes()).isPayToScriptHash())
+                            if (prevOut.getScript().isPayToScriptHash())
                                 sigOps += Script.getP2SHSigOpCount(in.getScriptBytes());
                             if (sigOps > Block.MAX_BLOCK_SIGOPS)
                                 throw new VerificationException("Too many P2SH SigOps in block");
                         }
                         
-                        prevOutScripts.add(new Script(prevOut.getScriptBytes()));
-                        
-                        //in.getScriptSig().correctlySpends(tx, index, new Script(params, prevOut.getScriptBytes(), 0, prevOut.getScriptBytes().length));
+                        prevOutScripts.add(prevOut.getScript());
                         
                         blockStore.removeUnspentTransactionOutput(prevOut);
                         txOutsSpent.add(prevOut);
@@ -227,14 +283,19 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                 for (TransactionOutput out : tx.getOutputs()) {
                     valueOut = valueOut.add(out.getValue());
                     // For each output, add it to the set of unspent outputs so it can be consumed in future.
-                    StoredTransactionOutput newOut = new StoredTransactionOutput(hash, out.getIndex(), out.getValue(),
-                            height, isCoinBase, out.getScriptBytes());
+                    Script script = getScript(out.getScriptBytes());
+                    UTXO newOut = new UTXO(hash,
+                            out.getIndex(),
+                            out.getValue(),
+                            height, isCoinBase,
+                            script,
+                            getScriptAddress(script));
                     blockStore.addUnspentTransactionOutput(newOut);
                     txOutsCreated.add(newOut);
                 }
                 // All values were already checked for being non-negative (as it is verified in Transaction.verify())
                 // but we check again here just for defence in depth. Transactions with zero output value are OK.
-                if (valueOut.signum() < 0 || valueOut.compareTo(NetworkParameters.MAX_MONEY) > 0)
+                if (valueOut.signum() < 0 || valueOut.compareTo((Coin) params.getMaxMoney()) > 0)
                     throw new VerificationException("Transaction output value out of range");
                 
                 if (!isCoinBase && runScripts) {
@@ -290,8 +351,8 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
         try {
             List<Transaction> transactions = block.getTransactions();
             if (transactions != null) {
-                LinkedList<StoredTransactionOutput> txOutsSpent = new LinkedList<StoredTransactionOutput>();
-                LinkedList<StoredTransactionOutput> txOutsCreated = new LinkedList<StoredTransactionOutput>();
+                LinkedList<UTXO> txOutsSpent = new LinkedList<UTXO>();
+                LinkedList<UTXO> txOutsCreated = new LinkedList<UTXO>();
                 long sigOps = 0;
                 final Set<VerifyFlag> verifyFlags = EnumSet.noneOf(VerifyFlag.class);
                 if (newBlock.getHeader().getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME)
@@ -315,22 +376,21 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     if (!isCoinBase) {
                         for (int index = 0; index < tx.getInputs().size(); index++) {
                             final TransactionInput in = tx.getInputs().get(index);
-                            final StoredTransactionOutput prevOut = blockStore.getTransactionOutput(in.getOutpoint().getHash(),
+                            final UTXO prevOut = blockStore.getTransactionOutput(in.getOutpoint().getHash(),
                                                                                                     in.getOutpoint().getIndex());
                             if (prevOut == null)
                                 throw new VerificationException("Attempted spend of a non-existent or already spent output!");
-                            if (newBlock.getHeight() - prevOut.getHeight() < params.getSpendableCoinbaseDepth())
+                            if (prevOut.isCoinbase() && newBlock.getHeight() - prevOut.getHeight() < params.getSpendableCoinbaseDepth())
                                 throw new VerificationException("Tried to spend coinbase at depth " + (newBlock.getHeight() - prevOut.getHeight()));
                             valueIn = valueIn.add(prevOut.getValue());
                             if (verifyFlags.contains(VerifyFlag.P2SH)) {
-                                Script script = new Script(prevOut.getScriptBytes());
-                                if (script.isPayToScriptHash())
+                                if (prevOut.getScript().isPayToScriptHash())
                                     sigOps += Script.getP2SHSigOpCount(in.getScriptBytes());
                                 if (sigOps > Block.MAX_BLOCK_SIGOPS)
                                     throw new VerificationException("Too many P2SH SigOps in block");
                             }
                             
-                            prevOutScripts.add(new Script(prevOut.getScriptBytes()));
+                            prevOutScripts.add(prevOut.getScript());
                             
                             blockStore.removeUnspentTransactionOutput(prevOut);
                             txOutsSpent.add(prevOut);
@@ -339,15 +399,20 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     Sha256Hash hash = tx.getHash();
                     for (TransactionOutput out : tx.getOutputs()) {
                         valueOut = valueOut.add(out.getValue());
-                        StoredTransactionOutput newOut = new StoredTransactionOutput(hash, out.getIndex(), out.getValue(),
-                                                                                     newBlock.getHeight(), isCoinBase,
-                                                                                     out.getScriptBytes());
+                        Script script = getScript(out.getScriptBytes());
+                        UTXO newOut = new UTXO(hash,
+                                out.getIndex(),
+                                out.getValue(),
+                                newBlock.getHeight(),
+                                isCoinBase,
+                                script,
+                                getScriptAddress(script));
                         blockStore.addUnspentTransactionOutput(newOut);
                         txOutsCreated.add(newOut);
                     }
                     // All values were already checked for being non-negative (as it is verified in Transaction.verify())
                     // but we check again here just for defence in depth. Transactions with zero output value are OK.
-                    if (valueOut.signum() < 0 || valueOut.compareTo(NetworkParameters.MAX_MONEY) > 0)
+                    if (valueOut.signum() < 0 || valueOut.compareTo((Coin) params.getMaxMoney()) > 0)
                         throw new VerificationException("Transaction output value out of range");
                     
                     if (!isCoinBase) {
@@ -374,14 +439,14 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
             } else {
                 txOutChanges = block.getTxOutChanges();
                 if (!params.isCheckpoint(newBlock.getHeight()))
-                    for(StoredTransactionOutput out : txOutChanges.txOutsCreated) {
+                    for (UTXO out : txOutChanges.txOutsCreated) {
                         Sha256Hash hash = out.getHash();
                         if (blockStore.getTransactionOutput(hash, out.getIndex()) != null)
                             throw new VerificationException("Block failed BIP30 test!");
                     }
-                for (StoredTransactionOutput out : txOutChanges.txOutsCreated)
+                for (UTXO out : txOutChanges.txOutsCreated)
                     blockStore.addUnspentTransactionOutput(out);
-                for (StoredTransactionOutput out : txOutChanges.txOutsSpent)
+                for (UTXO out : txOutChanges.txOutsSpent)
                     blockStore.removeUnspentTransactionOutput(out);
             }
         } catch (VerificationException e) {
@@ -408,9 +473,9 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
             StoredUndoableBlock undoBlock = blockStore.getUndoBlock(oldBlock.getHeader().getHash());
             if (undoBlock == null) throw new PrunedException(oldBlock.getHeader().getHash());
             TransactionOutputChanges txOutChanges = undoBlock.getTxOutChanges();
-            for(StoredTransactionOutput out : txOutChanges.txOutsSpent)
+            for (UTXO out : txOutChanges.txOutsSpent)
                 blockStore.addUnspentTransactionOutput(out);
-            for(StoredTransactionOutput out : txOutChanges.txOutsCreated)
+            for (UTXO out : txOutChanges.txOutsCreated)
                 blockStore.removeUnspentTransactionOutput(out);
         } catch (PrunedException e) {
             blockStore.abortDatabaseBatchWrite();

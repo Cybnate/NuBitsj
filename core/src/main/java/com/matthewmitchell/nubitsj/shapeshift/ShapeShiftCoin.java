@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 NuBits Developers
+ * Copyright (C) 2015-2016 NuBits Developers
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,7 @@
 
 package com.matthewmitchell.nubitsj.shapeshift;
 
-import com.matthewmitchell.nubitsj.core.Coin;
-import static com.matthewmitchell.nubitsj.core.Coin.SMALLEST_UNIT_EXPONENT;
+import com.matthewmitchell.nubitsj.core.CoinDetails;
 import com.matthewmitchell.nubitsj.core.Monetary;
 import com.matthewmitchell.nubitsj.core.NetworkParameters;
 import com.matthewmitchell.nubitsj.utils.MonetaryFormat;
@@ -31,82 +30,88 @@ import java.math.BigDecimal;
  *
  * @author Matthew Mitchell
  */
-public class ShapeShiftCoin extends NetworkParameters {
+public class ShapeShiftCoin extends CoinDetails {
 	
-	private static MonetaryFormat FORMAT8 = new MonetaryFormat().shift(0).minDecimals(2).repeatOptionalDecimals(1, 6).noCode();
-	private static MonetaryFormat FORMAT6 = new MonetaryFormat().shift(0).minDecimals(2).repeatOptionalDecimals(1, 4).noCode();
-	private static MonetaryFormat FORMAT5 = new MonetaryFormat().shift(0).minDecimals(2).repeatOptionalDecimals(1, 3).noCode();
-	
-	public final String name;
-	public final String coinCode;
-	public final int exponent;
-	
-	public transient MonetaryFormat format;
-	
-	static public int ADDRESS_PREFIX_NULL = -1;
-	
-	private void setFormat() {
-		
-		if (exponent == 8) 
-			this.format = FORMAT8;
-		else if (exponent == 6) 
-			this.format = FORMAT6;
-		else 
-			this.format = FORMAT5;
-		
-	}
+    private static MonetaryFormat FORMAT8 = new MonetaryFormat().shift(0).minDecimals(2).repeatOptionalDecimals(1, 6).noCode();
+    private static MonetaryFormat FORMAT6 = new MonetaryFormat().shift(0).minDecimals(2).repeatOptionalDecimals(1, 4).noCode();
+    private static MonetaryFormat FORMAT5 = new MonetaryFormat().shift(0).minDecimals(2).repeatOptionalDecimals(1, 3).noCode();
+
+    private final String name;
+    private final String coinCode;
+    private final int exponent;
+
+    static public int ADDRESS_PREFIX_NULL = -1;
 	
     /**
      * Construct a ShapeShiftCoin instance with given parameters.
      *
-     * @params name The human readable coin name
-     * @params uriPrefix The prefix before ":" on coin URIs
-     * @params coinCode The code used to identify the coin, in capitals and typically 3-5 characters
-     * @params exponent The number of decimals after the decimal place.
-     * @params addressHeader The integer of the address prefix for pubKeyHash addresses
-     * @params p2shHeader The integer of the address prefix for P2SH addresses
+     * @param name The human readable coin name
+     * @param uriPrefix The prefix before ":" on coin URIs
+     * @param coinCode The code used to identify the coin, in capitals and typically 3-5 characters
+     * @param exponent The number of decimals after the decimal place.
+     * @param addressHeader The integer of the address prefix for pubKeyHash addresses
+     * @param p2shHeader The integer of the address prefix for P2SH addresses
      */
-	public ShapeShiftCoin(String name, String uriPrefix, String coinCode, int exponent, int addressHeader, int p2shHeader) {
-		this.name = name;
-		this.id = uriPrefix;
-		this.coinCode = coinCode;
-		this.exponent = exponent;
-		this.addressHeader = addressHeader;
+    public ShapeShiftCoin(String name, String uriPrefix, String coinCode, int exponent, int addressHeader, int p2shHeader) {
+        this.name = name;
+        this.id = uriPrefix;
+        this.coinCode = coinCode;
+        this.exponent = exponent;
+        this.addressHeader = addressHeader;
         this.p2shHeader = p2shHeader;
         this.acceptableAddressCodes = new int[] { addressHeader, p2shHeader };
-		setFormat();
-	}
-	
-	private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
-		in.defaultReadObject();
-		setFormat();
-	}
+    }
 
-	@Override
-	public String getPaymentProtocolId() {
-		throw new UnsupportedOperationException("Not supported.");
-	}
-	
-	@Override
-	public ShapeShiftMonetary parseCoin(String str) {
-		return new ShapeShiftMonetary(new BigDecimal(str).movePointRight(exponent).toBigIntegerExact().longValue(), exponent);
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+	    in.defaultReadObject();
+    }
+
+    @Override
+    public ShapeShiftMonetary parseCoin(String str) {
+	    return new ShapeShiftMonetary(new BigDecimal(str).movePointRight(exponent).toBigIntegerExact().longValue(), exponent);
     }
 	
     /**
      * Gets a {@link com.matthewmitchell.nubitsj.shapeshift.ShapeShiftMonetary} by rounding amounts
      */
-	public ShapeShiftMonetary parseCoinInexact(String str) {
-		return new ShapeShiftMonetary(new BigDecimal(str).movePointRight(exponent).setScale(0, BigDecimal.ROUND_HALF_UP).toBigInteger().longValue(), exponent);
-	}
-	
-	@Override
-	public boolean isShapeShift() {
-		return true;
-	}
-	
-	@Override
-	public String toString() {
-		return name;
-	}
+    public ShapeShiftMonetary parseCoinInexact(String str) {
+	    return new ShapeShiftMonetary(new BigDecimal(str).movePointRight(exponent).setScale(0, BigDecimal.ROUND_HALF_UP).toBigInteger().longValue(), exponent);
+    }
+     
+    public String getCoinCode() {
+        return coinCode;
+    }
+    
+    public int getExponent() {
+        return exponent;
+    }
+    
+    @Override
+    public boolean isShapeShift() {
+	    return true;
+    }
+
+    @Override
+    public String toString() {
+	    return name;
+    }
+
+    @Override
+    public String getUriScheme() {
+        return name;
+    }
+
+    @Override
+    public MonetaryFormat getMonetaryFormat() {
+        
+         if (exponent == 8) 
+		    return FORMAT8;
+        
+	    if (exponent == 6) 
+		    return FORMAT6;
+        
+	    return FORMAT5;
+        
+    }
 	
 }

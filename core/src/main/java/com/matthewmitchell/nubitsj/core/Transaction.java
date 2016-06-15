@@ -1,5 +1,6 @@
 /**
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +24,7 @@ import com.matthewmitchell.nubitsj.script.ScriptBuilder;
 import com.matthewmitchell.nubitsj.script.ScriptOpCodes;
 import com.matthewmitchell.nubitsj.utils.ExchangeRate;
 import com.matthewmitchell.nubitsj.wallet.WalletTransaction.Pool;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -91,7 +93,6 @@ public class Transaction extends ChildMessage implements Serializable {
 
     /**
      * If fee is lower than this value (in satoshis), a default reference client will treat it as if there were no fee.
-     * Currently this is 10000 satoshis.
      */
     public static final Coin REFERENCE_DEFAULT_MIN_TX_FEE = Coin.valueOf(100);
 
@@ -122,7 +123,7 @@ public class Transaction extends ChildMessage implements Serializable {
     private transient Sha256Hash hash;
 
     // Data about how confirmed this tx is. Serialized, may be null. 
-    private TransactionConfidence confidence;
+    @Nullable private TransactionConfidence confidence;
 
     // Records a map of which blocks the transaction has appeared in (keys) to an index within that block (values).
     // The "index" is not a real index, instead the values are only meaningful relative to each other. For example,
@@ -225,7 +226,7 @@ public class Transaction extends ChildMessage implements Serializable {
     }
 
     /**
-     * Creates a transaction by reading payload starting from offset bytes in. Length of a transaction is fixed.
+     * Creates a transaction by reading payload. Length of a transaction is fixed.
      */
     public Transaction(NetworkParameters params, byte[] payload, @Nullable Message parent, boolean parseLazy, boolean parseRetain, int length)
             throws ProtocolException {
@@ -239,7 +240,7 @@ public class Transaction extends ChildMessage implements Serializable {
     public Sha256Hash getHash() {
         if (hash == null) {
             byte[] bits = nubitsSerialize();
-            hash = new Sha256Hash(reverseBytes(doubleDigest(bits)));
+            hash = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(bits));
         }
         return hash;
     }
@@ -388,12 +389,23 @@ public class Transaction extends ChildMessage implements Serializable {
         }
         return v;
     }
+    @Nullable private Coin cachedValue;
+    @Nullable private TransactionBag cachedForBag;
 
     /**
      * Returns the difference of {@link Transaction#getValueSentToMe(TransactionBag)} and {@link Transaction#getValueSentFromMe(TransactionBag)}.
      */
     public Coin getValue(TransactionBag wallet) throws ScriptException {
-        return getValueSentToMe(wallet).subtract(getValueSentFromMe(wallet));
+        // FIXME: TEMP PERF HACK FOR ANDROID - this crap can go away once we have a real payments API.
+        boolean isAndroid = Utils.isAndroidRuntime();
+        if (isAndroid && cachedValue != null && cachedForBag == wallet)
+            return cachedValue;
+        Coin result = getValueSentToMe(wallet).subtract(getValueSentFromMe(wallet));
+        if (isAndroid) {
+            cachedValue = result;
+            cachedForBag = wallet;
+        }
+        return result;
     }
 
     /**
@@ -413,27 +425,6 @@ public class Transaction extends ChildMessage implements Serializable {
             fee = fee.subtract(output.getValue());
         }
         return fee;
-    }
-
-    boolean disconnectInputs() {
-        boolean disconnected = false;
-        maybeParse();
-        for (TransactionInput input : inputs) {
-            disconnected |= input.disconnect();
-        }
-        return disconnected;
-    }
-
-    /**
-     * Returns true if every output is marked as spent.
-     */
-    public boolean isEveryOutputSpent() {
-        maybeParse();
-        for (TransactionOutput output : outputs) {
-            if (output.isAvailableForSpending())
-                return false;
-        }
-        return true;
     }
 
     /**
@@ -651,7 +642,9 @@ public class Transaction extends ChildMessage implements Serializable {
     public String toString(@Nullable AbstractBlockChain chain) {
         // Basic info about the tx.
         StringBuilder s = new StringBuilder();
-        s.append(String.format("  %s: %s%n", getHashAsString(), getConfidence()));
+        s.append("  ").append(getHashAsString()).append('\n');
+        if (hasConfidence())
+            s.append("  confidence: ").append(getConfidence()).append('\n');
         if (isTimeLocked()) {
             String time;
             if (lockTime < LOCKTIME_THRESHOLD) {
@@ -663,10 +656,10 @@ public class Transaction extends ChildMessage implements Serializable {
             } else {
                 time = new Date(lockTime*1000).toString();
             }
-            s.append(String.format("  time locked until %s%n", time));
+            s.append(String.format(Locale.US, "  time locked until %s%n", time));
         }
         if (inputs.size() == 0) {
-            s.append(String.format("  INCOMPLETE: No inputs!%n"));
+            s.append(String.format(Locale.US, "  INCOMPLETE: No inputs!%n"));
             return s.toString();
         }
         if (isCoinBase()) {
@@ -679,7 +672,8 @@ public class Transaction extends ChildMessage implements Serializable {
                 script = "???";
                 script2 = "???";
             }
-            s.append("     == COINBASE TXN (scriptSig " + script + ")  (scriptPubKey " + script2 + ")\n");
+            s.append("     == COINBASE TXN (scriptSig ").append(script)
+                .append(")  (scriptPubKey ").append(script2).append(")\n");
             return s.toString();
         }
         for (TransactionInput in : inputs) {
@@ -697,13 +691,18 @@ public class Transaction extends ChildMessage implements Serializable {
                 s.append(outpoint.toString());
                 final TransactionOutput connectedOutput = outpoint.getConnectedOutput();
                 if (connectedOutput != null) {
-                    s.append(" hash160:");
-                    s.append(Utils.HEX.encode(connectedOutput.getScriptPubKey().getPubKeyHash()));
+                    Script scriptPubKey = connectedOutput.getScriptPubKey();
+                    if (scriptPubKey.isSentToAddress() || scriptPubKey.isPayToScriptHash()) {
+                        s.append(" hash160:");
+                        s.append(Utils.HEX.encode(scriptPubKey.getPubKeyHash()));
+                    }
                 }
+                if (in.hasSequence())
+                    s.append("\n          (has sequence)");
             } catch (Exception e) {
                 s.append("[exception: ").append(e.getMessage()).append("]");
             }
-            s.append(String.format("%n"));
+            s.append(String.format(Locale.US, "%n"));
         }
         for (TransactionOutput out : outputs) {
             s.append("     ");
@@ -723,11 +722,16 @@ public class Transaction extends ChildMessage implements Serializable {
             } catch (Exception e) {
                 s.append("[exception: ").append(e.getMessage()).append("]");
             }
-            s.append(String.format("%n"));
+            s.append(String.format(Locale.US, "%n"));
         }
-        Coin fee = getFee();
-        if (fee != null)
-            s.append("     fee  ").append(fee.toFriendlyString()).append(String.format("%n"));
+        final Coin fee = getFee();
+        if (fee != null) {
+            final int size = unsafeNubitsSerialize().length;
+            s.append("     fee  ").append(fee.multiply(1000).divide(size).toFriendlyString()).append("/kB, ")
+                    .append(fee.toFriendlyString()).append(" for ").append(size).append(" bytes\n");
+        }
+        if (purpose != null)
+            s.append("     prps ").append(purpose).append(String.format(Locale.US, "%n"));
         return s.toString();
     }
 
@@ -820,7 +824,7 @@ public class Transaction extends ChildMessage implements Serializable {
     }
 
     /**
-     * Removes all the inputs from this transaction.
+     * Removes all the outputs from this transaction.
      * Note that this also invalidates the length attribute
      */
     public void clearOutputs() {
@@ -973,7 +977,7 @@ public class Transaction extends ChildMessage implements Serializable {
 
             // This step has no purpose beyond being synchronized with the reference clients bugs. OP_CODESEPARATOR
             // is a legacy holdover from a previous, broken design of executing scripts that shipped in Nubits 0.1.
-            // It was seriously flawed and would have let anyone take anyone elses money. later versions switched to
+            // It was seriously flawed and would have let anyone take anyone elses money. Later versions switched to
             // the design we use today where scripts are executed independently but share a stack. This left the
             // OP_CODESEPARATOR instruction having no purpose as it was only meant to be used internally, not actually
             // ever put into scripts. Deleting OP_CODESEPARATOR is a step that should never be required but if we don't
@@ -1012,7 +1016,7 @@ public class Transaction extends ChildMessage implements Serializable {
                     this.outputs = outputs;
                     // Satoshis bug is that SignatureHash was supposed to return a hash and on this codepath it
                     // actually returns the constant "1" to indicate an error, which is never checked for. Oops.
-                    return new Sha256Hash("0100000000000000000000000000000000000000000000000000000000000000");
+                    return Sha256Hash.wrap("0100000000000000000000000000000000000000000000000000000000000000");
                 }
                 // In SIGHASH_SINGLE the outputs after the matching input index are deleted, and the outputs before
                 // that position are "nulled out". Unintuitively, the value in a "null" transaction is set to -1.
@@ -1039,7 +1043,7 @@ public class Transaction extends ChildMessage implements Serializable {
             uint32ToByteStreamLE(0x000000ff & sigHashType, bos);
             // Note that this is NOT reversed to ensure it will be signed correctly. If it were to be printed out
             // however then we would expect that it is IS reversed.
-            Sha256Hash hash = new Sha256Hash(doubleDigest(bos.toByteArray()));
+            Sha256Hash hash = Sha256Hash.twiceOf(bos.toByteArray());
             bos.close();
 
             // Put the transaction back to how we found it.
@@ -1089,7 +1093,18 @@ public class Transaction extends ChildMessage implements Serializable {
      */
     public void setLockTime(long lockTime) {
         unCache();
-        // TODO: Consider checking that at least one input has a non-final sequence number.
+        boolean seqNumSet = false;
+        for (TransactionInput input : inputs) {
+            if (input.getSequenceNumber() != TransactionInput.NO_SEQUENCE) {
+                seqNumSet = true;
+                break;
+            }
+        }
+        if (lockTime != 0 && (!seqNumSet || inputs.isEmpty())) {
+            // At least one input must have a non-default sequence number for lock times to have any effect.
+            // For instance one of them can be set to zero to make this feature work.
+            log.warn("You are setting the lock time on a transaction but none of the inputs have non-default sequence numbers. This will not do what you expect!");
+        }
         this.lockTime = lockTime;
     }
 
@@ -1128,7 +1143,6 @@ public class Transaction extends ChildMessage implements Serializable {
     public List<TransactionOutput> getWalletOutputs(TransactionBag transactionBag){
         maybeParse();
         List<TransactionOutput> walletOutputs = new LinkedList<TransactionOutput>();
-        Coin v = Coin.ZERO;
         for (TransactionOutput o : outputs) {
             if (!o.isMineOrWatched(transactionBag)) continue;
             walletOutputs.add(o);
@@ -1143,27 +1157,46 @@ public class Transaction extends ChildMessage implements Serializable {
         Collections.shuffle(outputs);
     }
 
-    /** @return the given transaction: same as getInputs().get(index). */
-    public TransactionInput getInput(int index) {
+    /** Same as getInputs().get(index). */
+    public TransactionInput getInput(long index) {
         maybeParse();
-        return inputs.get(index);
+        return inputs.get((int)index);
     }
 
-    public TransactionOutput getOutput(int index) {
+    /** Same as getOutputs().get(index) */
+    public TransactionOutput getOutput(long index) {
         maybeParse();
-        return outputs.get(index);
+        return outputs.get((int)index);
     }
 
-    public synchronized TransactionConfidence getConfidence() {
-        if (confidence == null) {
-            confidence = new TransactionConfidence(this);
-        }
+    /**
+     * Returns the confidence object for this transaction from the {@link com.matthewmitchell.nubitsj.core.TxConfidenceTable}
+     * referenced by the implicit {@link Context}.
+     */
+    public TransactionConfidence getConfidence() {
+        return getConfidence(Context.get());
+    }
+    
+    /**
+     * Returns the confidence object for this transaction from the {@link com.matthewmitchell.nubitsj.core.TxConfidenceTable}
+     * referenced by the given {@link Context}.
+     */
+    public TransactionConfidence getConfidence(Context context) {
+        return getConfidence(context.getConfidenceTable());
+    }
+
+    /**
+     * Returns the confidence object for this transaction from the {@link com.matthewmitchell.nubitsj.core.TxConfidenceTable}
+     */
+    public TransactionConfidence getConfidence(TxConfidenceTable table) {
+        if (confidence == null)
+            confidence = table.getOrCreate(getHash()) ;
         return confidence;
     }
 
     /** Check if the transaction has a known confidence */
-    public synchronized boolean hasConfidence() {
-        return confidence != null && confidence.getConfidenceType() != TransactionConfidence.ConfidenceType.UNKNOWN;
+    public boolean hasConfidence() {
+        return getConfidence().getConfidenceType() != TransactionConfidence.ConfidenceType.UNKNOWN;
     }
 
     @Override
@@ -1283,24 +1316,7 @@ public class Transaction extends ChildMessage implements Serializable {
      */
     public boolean isFinal(int height, long blockTimeSeconds) {
         long time = getLockTime();
-        if (time < (time < LOCKTIME_THRESHOLD ? height : blockTimeSeconds))
-            return true;
-        if (!isTimeLocked())
-            return true;
-        return false;
-    }
-
-    /**
-     * Parses the string either as a whole number of blocks, or if it contains slashes as a YYYY/MM/DD format date
-     * and returns the lock time in wire format.
-     */
-    public static long parseLockTimeStr(String lockTimeStr) throws ParseException {
-        if (lockTimeStr.indexOf("/") != -1) {
-            SimpleDateFormat format = new SimpleDateFormat("yyyy/MM/dd");
-            Date date = format.parse(lockTimeStr);
-            return date.getTime() / 1000;
-        }
-        return Long.parseLong(lockTimeStr);
+        return time < (time < LOCKTIME_THRESHOLD ? height : blockTimeSeconds) || !isTimeLocked();
     }
 
     /**

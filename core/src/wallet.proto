@@ -1,4 +1,5 @@
 /** Copyright 2013 Google Inc.
+ *  Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +15,7 @@
  */
 
 /*
- * Authors: Jim Burton, Miron Cuperman
+ * Authors: Jim Burton, Miron Cuperman, Andreas Schildbach
  */
  
 /* Notes:
@@ -65,6 +66,11 @@ message DeterministicKey {
    * a single P2SH multisignature address
    */
   optional bool isFollowing = 5;
+
+  // Number of signatures required to spend. This field is needed only for married keychains to reconstruct KeyChain
+  // and represents the N value from N-of-M CHECKMULTISIG script. For regular single keychains it will always be 1.
+  optional uint32 sigsRequiredToSpend = 6 [default = 1];
+
 }
 
 /**
@@ -144,7 +150,7 @@ message TransactionInput {
   required uint32 transaction_out_point_index = 2;
   // Script that contains the signatures/pubkeys.
   required bytes script_bytes = 3;
-  // Sequence number. Currently unused, but intended for contracts in future.
+  // Sequence number.
   optional uint32 sequence = 4;
   // Value of connected output, if known
   optional int64 value = 5;
@@ -356,7 +362,8 @@ message Wallet {
   optional ScryptParameters encryption_parameters = 6;
 
   // The version number of the wallet - used to detect wallets that were produced in the future
-  // (i.e the wallet may contain some future format this protobuf/ code does not know about)
+  // (i.e. the wallet may contain some future format this protobuf or parser code does not know about).
+  // A version that's higher than the default is considered from the future.
   optional int32 version = 7 [default = 1];
 
   // deprecated - do not recycle this numeric identifier
@@ -379,11 +386,7 @@ message Wallet {
   // transaction signers added to the wallet
   repeated TransactionSigner transaction_signers = 17;
 
-  // Number of signatures required to spend. This field is needed only for married wallets to reconstruct KeyChainGroup
-  // and represents the N value from N-of-M CHECKMULTISIG script. For regular single wallets it will always be 1.
-  optional uint32 sigsRequiredToSpend = 18 [default = 1];
-
-  // Next tag: 19
+  // Next tag: 18
 }
 
 /** An exchange rate between Bitcoin and some fiat currency. */

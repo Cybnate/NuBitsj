@@ -36,7 +36,7 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
     public static final int SMALLEST_UNIT_EXPONENT = 4;
 
     /**
-     * The numzber of satoshis equal to one nubits.
+     * The number of satoshis equal to one nubits.
      */
     private static final long COIN_VALUE = LongMath.pow(10, SMALLEST_UNIT_EXPONENT);
 
@@ -70,6 +70,7 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
      */
     public static final Coin SATOSHI = Coin.valueOf(1);
 
+    public static final Coin FIFTY_COINS = COIN.multiply(50);
     /**
      * Represents a monetary value of minus one satoshi.
      */
@@ -80,11 +81,8 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
      */
     public final long value;
 
-    private final long MAX_SATOSHIS = COIN_VALUE * NetworkParameters.MAX_COINS;
 
     private Coin(final long satoshis) {
-        checkArgument(-MAX_SATOSHIS <= satoshis && satoshis <= MAX_SATOSHIS,
-                "%s satoshis exceeds maximum possible quantity of Nubits.", satoshis);
         this.value = satoshis;
     }
 
@@ -113,7 +111,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         checkArgument(cents >= 0);
         checkArgument(coins >= 0);
         final Coin coin = COIN.multiply(coins).add(CENT.multiply(cents));
-        checkArgument(coin.compareTo(NetworkParameters.MAX_MONEY) <= 0);
         return coin;
     }
 
@@ -126,14 +123,24 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
      * @throws IllegalArgumentException if you try to specify fractional satoshis, or a value out of range.
      */
     public static Coin parseCoin(final String str) {
-        return Coin.valueOf(new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).toBigIntegerExact().longValue());
+        try {
+            long satoshis = new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).toBigIntegerExact().longValue();
+            return Coin.valueOf(satoshis);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(e); // Repackage exception to honor method contract
+        }
     }
 
     /**
      * Similar to parseCoin, but allows for inexact representations to be rounded
      */
     public static Coin parseCoinInexact(final String str) {
-        return Coin.valueOf(new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).setScale(0, BigDecimal.ROUND_HALF_UP).toBigInteger().longValue());
+        try {
+            long satoshis = new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).setScale(0, BigDecimal.ROUND_HALF_UP).toBigInteger().longValue();
+            return Coin.valueOf(satoshis);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(e); // Repackage exception to honor method contract
+        }
     }
 
     public Coin add(final Coin value) {

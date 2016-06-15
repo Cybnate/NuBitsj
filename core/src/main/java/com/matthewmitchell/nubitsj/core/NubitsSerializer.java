@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -110,7 +109,7 @@ public class NubitsSerializer {
 
         Utils.uint32ToByteArrayLE(message.length, header, 4 + COMMAND_LEN);
 
-        byte[] hash = doubleDigest(message);
+        byte[] hash = Sha256Hash.hashTwice(message);
         System.arraycopy(hash, 0, header, 4 + COMMAND_LEN + 4, 4);
         out.write(header);
         out.write(message);
@@ -172,7 +171,7 @@ public class NubitsSerializer {
 
         // Verify the checksum.
         byte[] hash;
-        hash = doubleDigest(payloadBytes);
+        hash = Sha256Hash.hashTwice(payloadBytes);
         if (header.checksum[0] != hash[0] || header.checksum[1] != hash[1] ||
                 header.checksum[2] != hash[2] || header.checksum[3] != hash[3]) {
             throw new ProtocolException("Checksum failed to verify, actual " +
@@ -212,7 +211,7 @@ public class NubitsSerializer {
         } else if (command.equals("tx")) {
             Transaction tx = new Transaction(params, payloadBytes, null, parseLazy, parseRetain, length);
             if (hash != null)
-                tx.setHash(new Sha256Hash(Utils.reverseBytes(hash)));
+                tx.setHash(Sha256Hash.wrapReversed(hash));
             message = tx;
         } else if (command.equals("addr")) {
             message = new AddressMessage(params, payloadBytes, parseLazy, parseRetain, length);
@@ -231,7 +230,8 @@ public class NubitsSerializer {
         } else if (command.equals("mempool")) {
             return new MemoryPoolMessage();
         } else {
-            log.warn("No support for deserializing message with name {}", command);
+            if (!command.equals("liquidity"))
+                log.warn("No support for deserializing message with name {}", command);
             return new UnknownMessage(params, command, payloadBytes);
         }
         if (checksum != null)
@@ -295,11 +295,7 @@ public class NubitsSerializer {
             for (; header[cursor] != 0 && cursor < COMMAND_LEN; cursor++) ;
             byte[] commandBytes = new byte[cursor];
             System.arraycopy(header, 0, commandBytes, 0, cursor);
-            try {
-                command = new String(commandBytes, "US-ASCII");
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);  // Cannot happen.
-            }
+            command = Utils.toString(commandBytes, "US-ASCII");
             cursor = COMMAND_LEN;
 
             size = (int) readUint32(header, cursor);

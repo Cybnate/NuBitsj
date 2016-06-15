@@ -16,6 +16,7 @@
 
 package com.matthewmitchell.nubitsj.store;
 
+import com.matthewmitchell.nubitsj.core.NetworkParameters;
 import com.matthewmitchell.nubitsj.core.Sha256Hash;
 import com.matthewmitchell.nubitsj.core.StoredBlock;
 
@@ -58,4 +59,10 @@ public interface BlockStore {
     
     /** Closes the store. */
     void close() throws BlockStoreException;
+
+    /**
+     * Get the {@link org.bitcoinj.core.NetworkParameters} of this store.
+     * @return The network params.
+     */
+    NetworkParameters getParams();
 }

@@ -21,8 +21,6 @@ import java.io.OutputStream;
 /**
  * Parent class for header only messages that don't have a payload.
  * Currently this includes getaddr, ping, verack as well as the special nubitsj class UnknownMessage
- *
- * @author git
  */
 public abstract class EmptyMessage extends Message {
     private static final long serialVersionUID = 8240801253854151802L;

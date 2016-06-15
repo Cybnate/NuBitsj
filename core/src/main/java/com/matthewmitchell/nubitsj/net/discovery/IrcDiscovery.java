@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * IrcDiscovery provides a way to find network peers by joining a pre-agreed rendevouz point on the LFnet IRC network.
- * <b>This class is deprecated because LFnet has ceased to operate and DNS seeds now exist for both prod and test
+ * <b>This class is deprecated because LFnet has ceased to operate and DNS seeds now exist for both main and test
  * networks.</b> It may conceivably still be useful for running small ad-hoc networks by yourself.
  */
 @Deprecated
@@ -75,6 +75,7 @@ public class IrcDiscovery implements PeerDiscovery {
     protected void onIRCReceive(String message) {
     }
 
+    @Override
     public void shutdown() {
         try {
             if (connection != null) {
@@ -89,6 +90,7 @@ public class IrcDiscovery implements PeerDiscovery {
      * does not mean it is accepting connections. The given time out value is applied for every IP returned by DNS
      * for the given server, so a timeout value of 1 second may result in 5 seconds delay if 5 servers are advertised.
      */
+    @Override
     public InetSocketAddress[] getPeers(long timeoutValue, TimeUnit timeoutUnit) throws PeerDiscoveryException {
         ArrayList<InetSocketAddress> addresses = new ArrayList<InetSocketAddress>();
         connection = null;
@@ -183,7 +185,7 @@ public class IrcDiscovery implements PeerDiscovery {
                 log.warn("Exception whilst closing IRC discovery: " + e.toString());
             }
         }
-        return addresses.toArray(new InetSocketAddress[]{});
+        return addresses.toArray(new InetSocketAddress[addresses.size()]);
     }
 
     private void logAndSend(String command) throws Exception {
@@ -220,7 +222,7 @@ public class IrcDiscovery implements PeerDiscovery {
                 continue;
             }
 
-            byte[] ipBytes = new byte[]{addressBytes[0], addressBytes[1], addressBytes[2], addressBytes[3]};
+            byte[] ipBytes = {addressBytes[0], addressBytes[1], addressBytes[2], addressBytes[3]};
             int port = Utils.readUint16BE(addressBytes, 4);
 
             InetAddress ip;

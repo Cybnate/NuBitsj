@@ -27,10 +27,9 @@ import com.matthewmitchell.nubitsj.shapeshift.ShapeShiftMonetary;
 import java.math.RoundingMode;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
  * <p>
@@ -52,6 +51,8 @@ public final class MonetaryFormat {
     /** Currency code for base 1 Nubits. */
     public static final String CODE_NBT = "NBT";
 
+    public static final int MAX_DECIMALS = 8;
+
     private final char negativeSign;
     private final char positiveSign;
     private final char zeroDigit;
@@ -60,7 +61,7 @@ public final class MonetaryFormat {
     private final List<Integer> decimalGroups;
     private final int shift;
     private final RoundingMode roundingMode;
-    private final Map<Integer, String> codes;
+    private final String[] codes;
     private final char codeSeparator;
     private final boolean codePrefixed;
 
@@ -218,16 +219,17 @@ public final class MonetaryFormat {
      * Configure currency code for given decimal separator shift. This configuration is not relevant for parsing.
      * 
      * @param codeShift
-     *            decimal separator shift, see {@link #shift()}
+     *            decimal separator shift, see {@link #shift}
      * @param code
      *            currency code
      */
     public MonetaryFormat code(int codeShift, String code) {
         checkArgument(codeShift >= 0);
-        Map<Integer, String> codes = new HashMap<Integer, String>();
-        if (this.codes != null)
-            codes.putAll(this.codes);
-        codes.put(codeShift, code);
+        final String[] codes = null == this.codes
+            ? new String[MAX_DECIMALS]
+            : Arrays.copyOf(this.codes, this.codes.length);
+
+        codes[codeShift] = code;
         return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
                 shift, roundingMode, codes, codeSeparator, codePrefixed);
     }
@@ -289,14 +291,14 @@ public final class MonetaryFormat {
         this.decimalGroups = null;
         this.shift = 0;
         this.roundingMode = RoundingMode.HALF_UP;
-        this.codes = new HashMap<Integer, String>();
-        this.codes.put(0, CODE_NBT);
+        this.codes = new String[MAX_DECIMALS];
+        this.codes[0] = CODE_NBT;
         this.codeSeparator = ' ';
         this.codePrefixed = true;
     }
 
     private MonetaryFormat(char negativeSign, char positiveSign, char zeroDigit, char decimalMark, int minDecimals,
-            List<Integer> decimalGroups, int shift, RoundingMode roundingMode, Map<Integer, String> codes,
+            List<Integer> decimalGroups, int shift, RoundingMode roundingMode, String[] codes,
             char codeSeparator, boolean codePrefixed) {
         this.negativeSign = negativeSign;
         this.positiveSign = positiveSign;
@@ -320,15 +322,17 @@ public final class MonetaryFormat {
         if (decimalGroups != null)
             for (int group : decimalGroups)
                 maxDecimals += group;
-        checkState(maxDecimals <= monetary.smallestUnitExponent());
+        int smallestUnitExponent = monetary.smallestUnitExponent();
+        checkState(maxDecimals <= smallestUnitExponent,
+                "The maximum possible number of decimals (%s) cannot exceed %s.", maxDecimals, smallestUnitExponent);
 
         // rounding
         long satoshis = Math.abs(monetary.getValue());
-        long precisionDivisor = checkedPow(10, monetary.smallestUnitExponent() - shift - maxDecimals);
+        long precisionDivisor = checkedPow(10, smallestUnitExponent - shift - maxDecimals);
         satoshis = checkedMultiply(divide(satoshis, precisionDivisor, roundingMode), precisionDivisor);
 
         // shifting
-        long shiftDivisor = checkedPow(10, monetary.smallestUnitExponent() - shift);
+        long shiftDivisor = checkedPow(10, smallestUnitExponent - shift);
         long numbers = satoshis / shiftDivisor;
         long decimals = satoshis % shiftDivisor;
 
@@ -338,7 +342,7 @@ public final class MonetaryFormat {
 
         // Only do decimals if we need any.
 
-        int decLen = monetary.smallestUnitExponent() - shift;
+        int decLen = smallestUnitExponent - shift;
 
         if (decLen > 0) {
 
@@ -401,7 +405,7 @@ public final class MonetaryFormat {
     }
 
     /**
-     * Parse a human readable fiat value to a {@link com.matthewmitchell.nubitsj.core.Fiat} instance.
+     * Parse a human readable fiat value to a {@link com.matthewmitchell.nubitsj.utils.Fiat} instance.
      * 
      * @throws NumberFormatException
      *             if the string cannot be parsed for some reason
@@ -458,10 +462,9 @@ public final class MonetaryFormat {
     public String code() {
         if (codes == null)
             return null;
-        String code = codes.get(shift);
-        if (code == null)
+        if (codes[shift] == null)
             throw new NumberFormatException("missing code for shift: " + shift);
-        return code;
+        return codes[shift];
     }
 }
 

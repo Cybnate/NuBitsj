@@ -47,14 +47,17 @@ public class HeadersMessage extends Message {
         blockHeaders = Arrays.asList(headers);
     }
 
+    public HeadersMessage(NetworkParameters params, List<Block> headers) throws ProtocolException {
+        super(params);
+        blockHeaders = headers;
+    }
     @Override
     public void nubitsSerializeToStream(OutputStream stream) throws IOException {
         stream.write(new VarInt(blockHeaders.size()).encode());
         for (Block header : blockHeaders) {
-            if (header.transactions == null)
-                header.nubitsSerializeToStream(stream);
-            else
-                header.cloneAsHeader().nubitsSerializeToStream(stream);
+            header.cloneAsHeader().nubitsSerializeToStream(stream);
+            // NuDroid: Headers need two null bytes afterwards
+            stream.write(0);
             stream.write(0);
         }
     }
@@ -86,7 +89,7 @@ public class HeadersMessage extends Message {
             byte[] blockHeader = readBytes(82);
             if (blockHeader[80] != 0 || blockHeader[81] != 0)
                 throw new ProtocolException("Block header does not end with a null byte");
-            Block newBlockHeader = new Block(this.params, blockHeader, true, true, 81);
+            Block newBlockHeader = new Block(this.params, blockHeader, true, true, 82);
             blockHeaders.add(newBlockHeader);
         }
 

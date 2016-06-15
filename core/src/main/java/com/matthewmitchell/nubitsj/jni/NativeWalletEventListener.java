@@ -23,7 +23,6 @@ import com.matthewmitchell.nubitsj.core.Wallet;
 import com.matthewmitchell.nubitsj.core.WalletEventListener;
 import com.matthewmitchell.nubitsj.script.Script;
 
-import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -53,5 +52,5 @@ public class NativeWalletEventListener implements WalletEventListener {
     public native void onKeysAdded(List<ECKey> keys);
 
     @Override
-    public native void onScriptsAdded(Wallet wallet, List<Script> scripts);
+    public native void onScriptsChanged(Wallet wallet, List<Script> scripts, boolean isAddingScripts);
 }

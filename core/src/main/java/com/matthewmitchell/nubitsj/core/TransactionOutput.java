@@ -1,5 +1,6 @@
 /**
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +17,12 @@
 
 package com.matthewmitchell.nubitsj.core;
 
-import com.matthewmitchell.nubitsj.script.Script;
-import com.matthewmitchell.nubitsj.script.ScriptBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.matthewmitchell.nubitsj.script.*;
+import org.slf4j.*;
 
-import javax.annotation.Nullable;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.lang.ref.WeakReference;
-import java.util.Arrays;
+import javax.annotation.*;
+import java.io.*;
+import java.util.*;
 
 import static com.google.common.base.Preconditions.*;
 
@@ -47,7 +42,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     private byte[] scriptBytes;
 
     // The script bytes are parsed and turned into a Script on demand.
-    private transient WeakReference<Script> scriptPubKey;
+    private transient Script scriptPubKey;
 
     // These fields are Java serialized but not Nubits serialized. They are used for tracking purposes in our wallet
     // only. If set to true, this output is counted towards our balance. If false and spentBy is null the tx output
@@ -88,7 +83,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
 
     /**
      * Creates an output that sends 'value' to the given address (public key hash). The amount should be created with
-     * something like {@link Utils#valueOf(int, int)}. Typically you would use
+     * something like {@link Coin#valueOf(int, int)}. Typically you would use
      * {@link Transaction#addOutput(Coin, Address)} instead of creating a TransactionOutput directly.
      */
     public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, Coin value, Address to) {
@@ -97,7 +92,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
 
     /**
      * Creates an output that sends 'value' to the given public key using a simple CHECKSIG script (no addresses). The
-     * amount should be created with something like {@link Utils#valueOf(int, int)}. Typically you would use
+     * amount should be created with something like {@link Coin#valueOf(int, int)}. Typically you would use
      * {@link Transaction#addOutput(Coin, ECKey)} instead of creating an output directly.
      */
     public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, Coin value, ECKey to) {
@@ -109,7 +104,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
         // Negative values obviously make no sense, except for -1 which is used as a sentinel value when calculating
         // SIGHASH_SINGLE signatures, so unfortunately we have to allow that here.
         checkArgument(value.signum() >= 0 || value.equals(Coin.NEGATIVE_SATOSHI), "Negative values not allowed");
-        checkArgument(value.compareTo(NetworkParameters.MAX_MONEY) < 0, "Values larger than MAX_MONEY not allowed");
+        checkArgument(value.compareTo(NetworkParameters.MAX_MONEY) <= 0, "Values larger than MAX_MONEY not allowed");
         this.value = value.value;
         this.scriptBytes = scriptBytes;
         setParent(parent);
@@ -118,17 +113,11 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     }
 
     public Script getScriptPubKey() throws ScriptException {
-        // Quick hack to try and reduce memory consumption on Androids. SoftReference is the same as WeakReference
-        // on Dalvik (by design), so this arrangement just means that we can avoid the cost of re-parsing the script
-        // bytes if getScriptPubKey is called multiple times in quick succession in between garbage collections.
-        Script script = scriptPubKey == null ? null : scriptPubKey.get();
-        if (script == null) {
+        if (scriptPubKey == null) {
             maybeParse();
-            script = new Script(scriptBytes);
-            scriptPubKey = new WeakReference<Script>(script);
-            return script;
+            scriptPubKey = new Script(scriptBytes);
         }
-        return script;
+        return scriptPubKey;
     }
 
     /**
@@ -217,8 +206,9 @@ public class TransactionOutput extends ChildMessage implements Serializable {
      * over the parents list to discover this.
      */
     public int getIndex() {
-        for (int i = 0; i < getParentTransaction().getOutputs().size(); i++) {
-            if (getParentTransaction().getOutputs().get(i) == this)
+        List<TransactionOutput> outputs = getParentTransaction().getOutputs();
+        for (int i = 0; i < outputs.size(); i++) {
+            if (outputs.get(i) == this)
                 return i;
         }
         throw new IllegalStateException("Output linked to wrong parent transaction?");
@@ -235,7 +225,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
         spentBy = input;
         if (log.isDebugEnabled()) {
             if (parent != null)
-                log.debug("Marked {}:{} as spent by {}", getParentTransaction().getHash(), getIndex(), input);
+                log.debug("Marked {}:{} as spent by {}", getParentTransactionHash(), getIndex(), input);
             else
                 log.debug("Marked floating output as spent by {}", input);
         }
@@ -247,7 +237,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     public void markAsUnspent() {
         if (log.isDebugEnabled()) {
             if (parent != null)
-                log.debug("Un-marked {}:{} as spent by {}", getParentTransaction().getHash(), getIndex(), spentBy);
+                log.debug("Un-marked {}:{} as spent by {}", getParentTransactionHash(), getIndex(), spentBy);
             else
                 log.debug("Un-marked floating output as spent by {}", spentBy);
         }
@@ -335,8 +325,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
                 buf.append(" to multisig");
             else
                 buf.append(" (unknown type)");
-            buf.append(" script:");
-            buf.append(script);
+            buf.append(" script:").append(script);
             return buf.toString();
         } catch (ScriptException e) {
             throw new RuntimeException(e);
@@ -352,10 +341,36 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     }
 
     /**
-     * Returns the transaction that owns this output, or throws NullPointerException if unowned.
+     * Returns the transaction that owns this output.
      */
+    @Nullable
     public Transaction getParentTransaction() {
-        return checkNotNull((Transaction) parent, "Free-standing TransactionOutput");
+        return (Transaction)parent;
+    }
+
+    /**
+     * Returns the transaction hash that owns this output.
+     */
+    @Nullable
+    public Sha256Hash getParentTransactionHash() {
+        return parent == null ? null : parent.getHash();
+    }
+
+    /**
+     * Returns the depth in blocks of the parent tx.
+     *
+     * <p>If the transaction appears in the top block, the depth is one. If it's anything else (pending, dead, unknown)
+     * then -1.</p>
+     * @return The tx depth or -1.
+     */
+    public int getParentTransactionDepthInBlocks() {
+        if (getParentTransaction() != null) {
+            TransactionConfidence confidence = getParentTransaction().getConfidence();
+            if (confidence.getConfidenceType() == TransactionConfidence.ConfidenceType.BUILDING) {
+                return confidence.getDepthInBlocks();
+            }
+        }
+        return -1;
     }
 
     /**
@@ -397,7 +412,11 @@ public class TransactionOutput extends ChildMessage implements Serializable {
 
     @Override
     public int hashCode() {
-        return 31 * (int) value + (scriptBytes != null ? Arrays.hashCode(scriptBytes) : 0);
+        int result = (int) (value ^ (value >>> 32));
+        result = 31 * result + Arrays.hashCode(scriptBytes);
+        if (parent != null)
+            result *= parent.getHash().hashCode() + getIndex();
+        return result;
     }
 
 }

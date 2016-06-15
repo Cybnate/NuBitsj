@@ -19,9 +19,6 @@ package com.matthewmitchell.nubitsj.core;
 import junit.framework.TestCase;
 import org.junit.Test;
 
-import com.matthewmitchell.nubitsj.core.AddressFormatException;
-import com.matthewmitchell.nubitsj.core.Base58;
-
 import java.math.BigInteger;
 import java.util.Arrays;
 

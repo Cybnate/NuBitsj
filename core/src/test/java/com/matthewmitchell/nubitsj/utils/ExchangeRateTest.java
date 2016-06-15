@@ -51,28 +51,20 @@ public class ExchangeRateTest {
         rate.fiatToCoin(Fiat.parseFiat("USD", "1"));
     }
 
-    @Test(expected = ArithmeticException.class)
-    public void fiatToCoinTooLarge() throws Exception {
-        ExchangeRate rate = new ExchangeRate(Fiat.parseFiat("XXX", "1"));
-        rate.fiatToCoin(Fiat.parseFiat("XXX", "2000000000001"));
+    @Test(expected = IllegalArgumentException.class)
+    public void constructMissingCurrencyCode() {
+        new ExchangeRate(Fiat.valueOf(null, 1));
     }
 
-    @Test(expected = ArithmeticException.class)
-    public void fiatToCoinTooSmall() throws Exception {
-        ExchangeRate rate = new ExchangeRate(Fiat.parseFiat("XXX", "1"));
-        rate.fiatToCoin(Fiat.parseFiat("XXX", "-2000000000001"));
+    @Test(expected = IllegalArgumentException.class)
+    public void constructNegativeCoin() {
+        new ExchangeRate(Coin.valueOf(-1), Fiat.valueOf("EUR", 1));
     }
 
-    @Test(expected = ArithmeticException.class)
-    public void coinToFiatTooLarge() throws Exception {
-        ExchangeRate rate = new ExchangeRate(Fiat.parseFiat("XXX", "1000000000"));
-        rate.coinToFiat(Coin.parseCoin("1000000"));
+    @Test(expected = IllegalArgumentException.class)
+    public void constructFiatCoin() {
+        new ExchangeRate(Fiat.valueOf("EUR", -1));
     }
 
-    @Test(expected = ArithmeticException.class)
-    public void coinToFiatTooSmall() throws Exception {
-        ExchangeRate rate = new ExchangeRate(Fiat.parseFiat("XXX", "1000000000"));
-        rate.coinToFiat(Coin.parseCoin("-1000000"));
-    }
 }
 

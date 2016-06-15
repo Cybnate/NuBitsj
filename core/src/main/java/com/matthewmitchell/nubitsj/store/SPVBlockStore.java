@@ -17,26 +17,19 @@
 package com.matthewmitchell.nubitsj.store;
 
 import com.matthewmitchell.nubitsj.core.*;
-import com.matthewmitchell.nubitsj.utils.Threading;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.matthewmitchell.nubitsj.utils.*;
+import org.slf4j.*;
 
-import javax.annotation.Nullable;
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
+import javax.annotation.*;
+import java.io.*;
+import java.nio.*;
+import java.nio.channels.*;
+import java.util.*;
+import java.util.concurrent.locks.*;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.base.Preconditions.*;
+
+// TODO: Lose the mmap in this class. There are too many platform bugs that require odd workarounds.
 
 /**
  * An SPVBlockStore holds a limited number of block headers in a memory mapped ring buffer. With such a store, you
@@ -110,7 +103,7 @@ public class SPVBlockStore implements BlockStore {
             FileChannel channel = randomAccessFile.getChannel();
             fileLock = channel.tryLock();
             if (fileLock == null)
-                throw new BlockStoreException("Store file is already locked by another process");
+                throw new ChainFileLockedException("Store file is already locked by another process");
 
             // Map it into memory read/write. The kernel will take care of flushing writes to disk at the most
             // efficient times, which may mean that until the map is deallocated the data on disk is randomly
@@ -241,7 +234,7 @@ public class SPVBlockStore implements BlockStore {
                 byte[] headHash = new byte[32];
                 buffer.position(8);
                 buffer.get(headHash);
-                Sha256Hash hash = new Sha256Hash(headHash);
+                Sha256Hash hash = Sha256Hash.wrap(headHash);
                 StoredBlock block = get(hash);
                 if (block == null)
                     throw new BlockStoreException("Corrupted block store: could not find chain head: " + hash);
@@ -269,11 +262,20 @@ public class SPVBlockStore implements BlockStore {
     public void close() throws BlockStoreException {
         try {
             buffer.force();
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                log.info("Windows mmap hack: Forcing buffer cleaning");
+                WindowsMMapHack.forceRelease(buffer);
+            }
             buffer = null;  // Allow it to be GCd and the underlying file mapping to go away.
             randomAccessFile.close();
         } catch (IOException e) {
             throw new BlockStoreException(e);
         }
+    }
+
+    @Override
+    public NetworkParameters getParams() {
+        return params;
     }
 
     protected static final int RECORD_SIZE = 32 /* hash */ + StoredBlock.COMPACT_SERIALIZED_SIZE;

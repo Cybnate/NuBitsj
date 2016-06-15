@@ -31,7 +31,7 @@ import java.util.List;
  *
  * <p>By default, neither currency codes nor symbols are included in formatted values as
  * output, nor recognized in parsed values as input.  The can be overridden by applying a
- * custom pattern using either the {@link NbtFormat.Builder#localizedPattern} or {@link NbtFormat.Builder#localizedPattern()} methods, as described in the documentation for the {@link NbtFormat.Builder}
+ * custom pattern using either the {@link NbtFormat.Builder#localizedPattern()} or {@link NbtFormat.Builder#localizedPattern()} methods, as described in the documentation for the {@link NbtFormat.Builder}
  * class.<ol>
  *
  * <p>A more detailed explanation, including examples, is in the documentation for the
@@ -168,19 +168,6 @@ public final class NbtFixedFormat extends NbtFormat {
      */
     @Override
     public String toString() {
-        String label;
-        switch(scale) {
-        case COIN_SCALE:
-            label = "Coin-format";
-            break;
-        case MILLICOIN_SCALE:
-            label = "Millicoin-format";
-            break;
-        case MICROCOIN_SCALE:
-            label = "Microcoin-format";
-            break;
-        default: label = "Fixed (" + String.valueOf(scale) + ") format";
-        }
         return prefixLabel(scale) + "format " + pattern();
     }
 

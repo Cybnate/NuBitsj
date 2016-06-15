@@ -17,21 +17,15 @@
 package com.matthewmitchell.nubitsj.wallet;
 
 import com.matthewmitchell.nubitsj.core.*;
-import com.matthewmitchell.nubitsj.params.MainNetParams;
-import com.matthewmitchell.nubitsj.params.UnitTestParams;
-import com.matthewmitchell.nubitsj.testing.FakeTxBuilder;
-import com.matthewmitchell.nubitsj.testing.TestWithWallet;
-import com.matthewmitchell.nubitsj.wallet.CoinSelection;
-import com.matthewmitchell.nubitsj.wallet.DefaultCoinSelector;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.matthewmitchell.nubitsj.params.*;
+import com.matthewmitchell.nubitsj.testing.*;
+import org.junit.*;
 
-import java.net.InetAddress;
-import java.util.ArrayList;
+import java.net.*;
+import java.util.*;
 
+import static com.google.common.base.Preconditions.*;
 import static com.matthewmitchell.nubitsj.core.Coin.*;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.*;
 
 public class DefaultCoinSelectorTest extends TestWithWallet {
@@ -79,7 +73,7 @@ public class DefaultCoinSelectorTest extends TestWithWallet {
 
         // Check we selected just the oldest one.
         DefaultCoinSelector selector = new DefaultCoinSelector();
-        CoinSelection selection = selector.select(COIN, wallet.calculateAllSpendCandidates(true));
+        CoinSelection selection = selector.select(COIN, wallet.calculateAllSpendCandidates());
         assertTrue(selection.gathered.contains(t1.getOutputs().get(0)));
         assertEquals(COIN, selection.valueGathered);
 
@@ -112,5 +106,23 @@ public class DefaultCoinSelectorTest extends TestWithWallet {
         assertEquals(t2.getOutput(0), candidates.get(0));
         assertEquals(t1.getOutput(0), candidates.get(1));
         assertEquals(t3.getOutput(0), candidates.get(2));
+    }
+
+    @Test
+    public void identicalInputs() throws Exception {
+        // Add four outputs to a transaction with same value and destination. Select them all.
+        Transaction t = new Transaction(params);
+        java.util.List<TransactionOutput> outputs = Arrays.asList(
+            new TransactionOutput(params, t, Coin.valueOf(3030), myAddress),
+            new TransactionOutput(params, t, Coin.valueOf(3030), myAddress),
+            new TransactionOutput(params, t, Coin.valueOf(3030), myAddress),
+            new TransactionOutput(params, t, Coin.valueOf(3030), myAddress)
+        );
+        t.getConfidence().setConfidenceType(TransactionConfidence.ConfidenceType.BUILDING);
+
+        DefaultCoinSelector selector = new DefaultCoinSelector();
+        CoinSelection selection = selector.select(COIN.multiply(2), outputs);
+
+        assertEquals(4, selection.gathered.size());
     }
 }

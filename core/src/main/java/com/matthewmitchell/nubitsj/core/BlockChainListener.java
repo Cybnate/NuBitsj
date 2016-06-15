@@ -25,13 +25,20 @@ import java.util.List;
  */
 public interface BlockChainListener {
     /**
-     * <p>Called by the {@link BlockChain} when a new block on the best chain is seen, AFTER relevant
-     * transactions are extracted and sent to us UNLESS the new block caused a re-org, in which case this will
-     * not be called (the {@link Wallet#reorganize(StoredBlock, java.util.List, java.util.List)} method will
-     * call this one in that case).</p>
-     * @param block
+     * Called when a new block on the best chain is seen, after relevant transactions are extracted and sent to
+     * us via either {@link #receiveFromBlock(Transaction, StoredBlock, com.matthewmitchell.nubitsj.core.BlockChain.NewBlockType, int)}
+     * or {@link #notifyTransactionIsInBlock(Sha256Hash, StoredBlock, com.matthewmitchell.nubitsj.core.BlockChain.NewBlockType, int)}.
+     * If this block is causing a re-organise to a new chain, this method is NOT called even though the block may be
+     * the new best block: your reorganize implementation is expected to do whatever would normally be done do for a new
+     * best block in this case.
      */
     void notifyNewBestBlock(StoredBlock block) throws VerificationException;
+
+    /**
+     * Called when starting or stopping a download of valid hashes.
+     * @param isDownloading true if the hashes started to download. false if the download stopped.
+     */
+    void notifyHashDownload(boolean isDownloading);
 
     /**
      * Called by the {@link BlockChain} when the best chain (representing total work done) has changed. In this case,
@@ -39,7 +46,7 @@ public interface BlockChainListener {
      * to go down in this case: money we thought we had can suddenly vanish if the rest of the network agrees it
      * should be so.<p>
      *
-     * The oldBlocks/newBlocks lists are ordered height-wise from top first to bottom last.
+     * The oldBlocks/newBlocks lists are ordered height-wise from top first to bottom last (i.e. newest blocks first).
      */
     void reorganize(StoredBlock splitPoint, List<StoredBlock> oldBlocks,
                     List<StoredBlock> newBlocks) throws VerificationException;

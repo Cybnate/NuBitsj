@@ -1,5 +1,6 @@
 /*
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +17,17 @@
 
 package com.matthewmitchell.nubitsj.core;
 
-import com.matthewmitchell.nubitsj.utils.ListenerRegistration;
-import com.matthewmitchell.nubitsj.utils.Threading;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.collect.*;
+import com.google.common.util.concurrent.*;
+import com.matthewmitchell.nubitsj.utils.*;
 
-import javax.annotation.Nullable;
-import java.io.Serializable;
-import java.math.BigInteger;
-import java.util.ListIterator;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executor;
+import javax.annotation.*;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 import static com.google.common.base.Preconditions.*;
+// TODO: Modify the getDepthInBlocks method to require the chain height to be specified, in preparation for ceasing to touch every tx on every block.
 
 /**
  * <p>A TransactionConfidence object tracks data you can use to make a confidence decision about a transaction.
@@ -54,8 +53,8 @@ import static com.google.common.base.Preconditions.*;
  * <p>Alternatively, you may know that the transaction is "dead", that is, one or more of its inputs have
  * been double spent and will never confirm unless there is another re-org.</p>
  *
- * <p>TransactionConfidence is updated via the {@link com.matthewmitchell.nubitsj.core.TransactionConfidence#notifyWorkDone(Block)}
- * method to ensure the block depth and work done are up to date.</p>
+ * <p>TransactionConfidence is updated via the {@link com.matthewmitchell.nubitsj.core.TransactionConfidence#incrementDepthInBlocks()}
+ * method to ensure the block depth is up to date.</p>
  * To make a copy that won't be changed, use {@link com.matthewmitchell.nubitsj.core.TransactionConfidence#duplicate()}.
  */
 public class TransactionConfidence implements Serializable {
@@ -68,7 +67,7 @@ public class TransactionConfidence implements Serializable {
      */
     private CopyOnWriteArrayList<PeerAddress> broadcastBy;
     /** The Transaction that this confidence object is associated with. */
-    private final Transaction transaction;
+    private final Sha256Hash hash;
     // Lazily created listeners array.
     private transient CopyOnWriteArrayList<ListenerRegistration<Listener>> listeners;
 
@@ -133,11 +132,20 @@ public class TransactionConfidence implements Serializable {
     }
     private Source source = Source.UNKNOWN;
 
-    public TransactionConfidence(Transaction tx) {
+    public TransactionConfidence(Sha256Hash hash) {
         // Assume a default number of peers for our set.
         broadcastBy = new CopyOnWriteArrayList<PeerAddress>();
         listeners = new CopyOnWriteArrayList<ListenerRegistration<Listener>>();
-        transaction = tx;
+        this.hash = hash;
+    }
+
+    /**
+     * In case the class gets created from a serialised version, we need to recreate the listeners object as it is set 
+     * as transient and only created in the constructor.
+     */
+    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        listeners = new CopyOnWriteArrayList<ListenerRegistration<Listener>>();
     }
 
     /**
@@ -151,7 +159,7 @@ public class TransactionConfidence implements Serializable {
      */
     public interface Listener {
         /** An enum that describes why a transaction confidence listener is being invoked (i.e. the class of change). */
-        public enum ChangeReason {
+        enum ChangeReason {
             /**
              * Occurs when the type returned by {@link com.matthewmitchell.nubitsj.core.TransactionConfidence#getConfidenceType()}
              * has changed. For example, if a PENDING transaction changes to BUILDING or DEAD, then this reason will
@@ -173,8 +181,16 @@ public class TransactionConfidence implements Serializable {
              */
             SEEN_PEERS,
         }
-        public void onConfidenceChanged(Transaction tx, ChangeReason reason);
+        void onConfidenceChanged(TransactionConfidence confidence, ChangeReason reason);
     }
+    // This is used to ensure that confidence objects which aren't referenced from anywhere but which have an event
+    // listener set on them don't become eligible for garbage collection. Otherwise the TxConfidenceTable, which only
+    // has weak references to these objects, would not be enough to keep the event listeners working as transactions
+    // propagate around the network - it cannot know directly if the API user is interested in the object, so it uses
+    // heap reachability as a proxy for interest.
+    //
+    // We add ourselves to this set when a listener is added and remove ourselves when the listener list is empty.
+    private static final Set<TransactionConfidence> pinnedConfidenceObjects = Collections.synchronizedSet(new HashSet<TransactionConfidence>());
 
     /**
      * <p>Adds an event listener that will be run when this confidence object is updated. The listener will be locked and
@@ -188,6 +204,7 @@ public class TransactionConfidence implements Serializable {
     public void addEventListener(Listener listener, Executor executor) {
         checkNotNull(listener);
         listeners.addIfAbsent(new ListenerRegistration<Listener>(listener, executor));
+        pinnedConfidenceObjects.add(this);
     }
 
     /**
@@ -206,7 +223,10 @@ public class TransactionConfidence implements Serializable {
 
     public boolean removeEventListener(Listener listener) {
         checkNotNull(listener);
-        return ListenerRegistration.removeFromList(listener, listeners);
+        boolean removed = ListenerRegistration.removeFromList(listener, listeners);
+        if (listeners.isEmpty())
+            pinnedConfidenceObjects.remove(this);
+        return removed;
     }
 
     /**
@@ -259,16 +279,18 @@ public class TransactionConfidence implements Serializable {
     /**
      * Called by a {@link Peer} when a transaction is pending and announced by a peer. The more peers announce the
      * transaction, the more peers have validated it (assuming your internet connection is not being intercepted).
-     * If confidence is currently unknown, sets it to {@link ConfidenceType#PENDING}. Listeners will be
-     * invoked in this case.
+     * If confidence is currently unknown, sets it to {@link ConfidenceType#PENDING}. Does not run listeners.
      *
      * @param address IP address of the peer, used as a proxy for identity.
+     * @return true if marked, false if this address was already seen (no-op)
      */
-    public synchronized boolean markBroadcastBy(PeerAddress address) {
+    public boolean markBroadcastBy(PeerAddress address) {
         if (!broadcastBy.addIfAbsent(address))
             return false;  // Duplicate.
-        if (getConfidenceType() == ConfidenceType.UNKNOWN) {
-            this.confidenceType = ConfidenceType.PENDING;
+        synchronized (this) {
+            if (getConfidenceType() == ConfidenceType.UNKNOWN) {
+                this.confidenceType = ConfidenceType.PENDING;
+            }
         }
         return true;
     }
@@ -283,8 +305,9 @@ public class TransactionConfidence implements Serializable {
     /**
      * Returns a snapshot of {@link PeerAddress}es that announced the transaction.
      */
-    public ListIterator<PeerAddress> getBroadcastBy() {
-        return broadcastBy.listIterator();
+    public Set<PeerAddress> getBroadcastBy() {
+        ListIterator<PeerAddress> iterator = broadcastBy.listIterator();
+        return Sets.newHashSet(iterator);
     }
 
     /** Returns true if the given address has been seen via markBroadcastBy() */
@@ -297,12 +320,7 @@ public class TransactionConfidence implements Serializable {
         StringBuilder builder = new StringBuilder();
         int peers = numBroadcastPeers();
         if (peers > 0) {
-            builder.append("Seen by ");
-            builder.append(peers);
-            if (peers > 1)
-                builder.append(" peers. ");
-            else
-                builder.append(" peer. ");
+            builder.append("Seen by ").append(peers).append(peers > 1 ? " peers. " : " peer. ");
         }
         switch (getConfidenceType()) {
             case UNKNOWN:
@@ -315,7 +333,7 @@ public class TransactionConfidence implements Serializable {
                 builder.append("Pending/unconfirmed.");
                 break;
             case BUILDING:
-                builder.append(String.format("Appeared in best chain at height %d, depth %d.",
+                builder.append(String.format(Locale.US, "Appeared in best chain at height %d, depth %d.",
                         getAppearedAtChainHeight(), getDepthInBlocks()));
                 break;
         }
@@ -325,9 +343,11 @@ public class TransactionConfidence implements Serializable {
     /**
      * Called by the wallet when the tx appears on the best chain and a new block is added to the top. Updates the
      * internal counter that tracks how deeply buried the block is.
+     *
+     * @return the new depth
      */
-    public synchronized void incrementDepthInBlocks() {
-        this.depth++;
+    public synchronized int incrementDepthInBlocks() {
+        return ++this.depth;
     }
 
     /**
@@ -349,6 +369,15 @@ public class TransactionConfidence implements Serializable {
      */
     public synchronized void setDepthInBlocks(int depth) {
         this.depth = depth;
+    }
+
+    /**
+     * Erases the set of broadcast/seen peers. This cannot be called whilst the confidence is PENDING. It is useful
+     * for saving memory and wallet space once a tx is buried so deep it doesn't seem likely to go pending again.
+     */
+    public void clearBroadcastBy() {
+        checkState(getConfidenceType() != ConfidenceType.PENDING);
+        broadcastBy.clear();
     }
 
     /**
@@ -378,16 +407,15 @@ public class TransactionConfidence implements Serializable {
     }
 
     /** Returns a copy of this object. Event listeners are not duplicated. */
-    public synchronized TransactionConfidence duplicate() {
-        TransactionConfidence c = new TransactionConfidence(transaction);
-        // There is no point in this sync block, it's just to help FindBugs.
-        synchronized (c) {
-            c.broadcastBy.addAll(broadcastBy);
+    public TransactionConfidence duplicate() {
+        TransactionConfidence c = new TransactionConfidence(hash);
+        c.broadcastBy.addAll(broadcastBy);
+        synchronized (this) {
             c.confidenceType = confidenceType;
             c.overridingTransaction = overridingTransaction;
             c.appearedAtChainHeight = appearedAtChainHeight;
-            return c;
         }
+        return c;
     }
 
     /**
@@ -401,7 +429,7 @@ public class TransactionConfidence implements Serializable {
             registration.executor.execute(new Runnable() {
                 @Override
                 public void run() {
-                    registration.listener.onConfidenceChanged(transaction, reason);
+                    registration.listener.onConfidenceChanged(TransactionConfidence.this, reason);
                 }
             });
         }
@@ -432,23 +460,27 @@ public class TransactionConfidence implements Serializable {
      * depth to one will wait until it appears in a block on the best chain, and zero will wait until it has been seen
      * on the network.
      */
-    public synchronized ListenableFuture<Transaction> getDepthFuture(final int depth, Executor executor) {
-        final SettableFuture<Transaction> result = SettableFuture.create();
+    public synchronized ListenableFuture<TransactionConfidence> getDepthFuture(final int depth, Executor executor) {
+        final SettableFuture<TransactionConfidence> result = SettableFuture.create();
         if (getDepthInBlocks() >= depth) {
-            result.set(transaction);
+            result.set(this);
         }
         addEventListener(new Listener() {
-            @Override public void onConfidenceChanged(Transaction tx, ChangeReason reason) {
+            @Override public void onConfidenceChanged(TransactionConfidence confidence, ChangeReason reason) {
                 if (getDepthInBlocks() >= depth) {
                     removeEventListener(this);
-                    result.set(transaction);
+                    result.set(confidence);
                 }
             }
         }, executor);
         return result;
     }
 
-    public synchronized ListenableFuture<Transaction> getDepthFuture(final int depth) {
+    public synchronized ListenableFuture<TransactionConfidence> getDepthFuture(final int depth) {
         return getDepthFuture(depth, Threading.USER_THREAD);
+    }
+
+    public Sha256Hash getTransactionHash() {
+        return hash;
     }
 }

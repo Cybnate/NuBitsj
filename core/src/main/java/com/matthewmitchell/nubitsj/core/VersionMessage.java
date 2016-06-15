@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Locale;
 
 /**
  * A VersionMessage holds information exchanged during connection setup with another peer. Most of the fields are not
@@ -73,7 +74,7 @@ public class VersionMessage extends Message {
     public boolean relayTxesBeforeFilter;
 
     /** The version of this library release, as a string. */
-    public static final String NubitsJ_VERSION = "0.14.4";
+    public static final String NubitsJ_VERSION = "0.15.0";
     /** The value that is prepended to the subVer field of this application. */
     public static final String LIBRARY_SUBVER = "/nubitsj:" + NubitsJ_VERSION + "/";
 
@@ -103,6 +104,7 @@ public class VersionMessage extends Message {
         }
         subVer = LIBRARY_SUBVER;
         bestHeight = newBestHeight;
+        relayTxesBeforeFilter = true;
 
         length = 85;
         if (protocolVersion > 31402)
@@ -181,6 +183,7 @@ public class VersionMessage extends Message {
         buf.write(subVerBytes);
         // Size of known block chain.
         Utils.uint32ToByteStreamLE(bestHeight, buf);
+        buf.write(relayTxesBeforeFilter ? 1 : 0);
     }
 
     /**
@@ -228,18 +231,19 @@ public class VersionMessage extends Message {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n");
-        sb.append("client version: ").append(clientVersion).append("\n");
-        sb.append("local services: ").append(localServices).append("\n");
-        sb.append("time:           ").append(time).append("\n");
-        sb.append("my addr:        ").append(myAddr).append("\n");
-        sb.append("their addr:     ").append(theirAddr).append("\n");
-        sb.append("sub version:    ").append(subVer).append("\n");
-        sb.append("best height:    ").append(bestHeight).append("\n");
-        sb.append("delay tx relay: ").append(!relayTxesBeforeFilter).append("\n");
-        return sb.toString();
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("\n");
+        stringBuilder.append("client version: ").append(clientVersion).append("\n");
+        stringBuilder.append("local services: ").append(localServices).append("\n");
+        stringBuilder.append("time:           ").append(time).append("\n");
+        stringBuilder.append("my addr:        ").append(myAddr).append("\n");
+        stringBuilder.append("their addr:     ").append(theirAddr).append("\n");
+        stringBuilder.append("sub version:    ").append(subVer).append("\n");
+        stringBuilder.append("best height:    ").append(bestHeight).append("\n");
+        stringBuilder.append("delay tx relay: ").append(!relayTxesBeforeFilter).append("\n");
+        return stringBuilder.toString();
     }
 
     public VersionMessage duplicate() {
@@ -279,9 +283,9 @@ public class VersionMessage extends Message {
         checkSubVerComponent(version);
         if (comments != null) {
             checkSubVerComponent(comments);
-            subVer = subVer.concat(String.format("%s:%s(%s)/", name, version, comments));
+            subVer = subVer.concat(String.format(Locale.US, "%s:%s(%s)/", name, version, comments));
         } else {
-            subVer = subVer.concat(String.format("%s:%s/", name, version));
+            subVer = subVer.concat(String.format(Locale.US, "%s:%s/", name, version));
         }
     }
 

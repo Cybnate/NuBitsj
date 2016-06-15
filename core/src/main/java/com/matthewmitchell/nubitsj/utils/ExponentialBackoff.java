@@ -33,7 +33,7 @@ public class ExponentialBackoff implements Comparable<ExponentialBackoff> {
     private float backoff;
     private long retryTime;
     private final Params params;
-	private boolean atMaximum = false;
+    private boolean atMaximum = false;
 
     /**
      * Parameters to configure a particular kind of exponential backoff.
@@ -76,7 +76,7 @@ public class ExponentialBackoff implements Comparable<ExponentialBackoff> {
     public void trackSuccess() {
         backoff = params.initial;
         retryTime = Utils.currentTimeMillis();
-		atMaximum = false;
+        atMaximum = false;
     }
 
     /** Track a failure - multiply the back off interval by the multiplier */
@@ -84,15 +84,15 @@ public class ExponentialBackoff implements Comparable<ExponentialBackoff> {
         retryTime = Utils.currentTimeMillis() + (long)backoff;
         backoff *= params.multiplier;
 
-		if (backoff > params.maximum) {
-			atMaximum = true;
-			backoff = params.maximum;
-		}
+        if (backoff > params.maximum) {
+	        atMaximum = true;
+	        backoff = params.maximum;
+        }
     }
 
-	public boolean isMaxmimum() {
-		return atMaximum;
-	}
+    public boolean isMaxmimum() {
+	    return atMaximum;
+    }
 
     /** Get the next time to retry, in milliseconds since the epoch */
     public long getRetryTime() {

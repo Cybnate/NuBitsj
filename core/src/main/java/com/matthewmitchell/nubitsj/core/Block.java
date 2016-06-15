@@ -19,6 +19,7 @@ package com.matthewmitchell.nubitsj.core;
 import com.matthewmitchell.nubitsj.script.Script;
 import com.matthewmitchell.nubitsj.script.ScriptBuilder;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
@@ -36,9 +37,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 
-import static com.matthewmitchell.nubitsj.core.Utils.doubleDigest;
-import static com.matthewmitchell.nubitsj.core.Utils.doubleDigestTwoBuffers;
+import static com.matthewmitchell.nubitsj.core.Coin.FIFTY_COINS;
+import static com.matthewmitchell.nubitsj.core.Sha256Hash.hashTwice;
 
 /**
  * <p>A block is a group of transactions, and is one of the fundamental data structures of the Nubits system.
@@ -83,8 +85,9 @@ public class Block extends Message {
     private long difficultyTarget; // "nBits"
     private long nonce;
 
+    // TODO: Get rid of all the direct accesses to this field. It's a long-since unnecessary holdover from the Dalvik days.
     /** If null, it means this object holds only the headers. */
-    public List<Transaction> transactions;
+    @Nullable List<Transaction> transactions;
     
     //Nubits
     private byte[] blockSig;
@@ -172,7 +175,7 @@ public class Block extends Message {
         hash = null;
     }
 
-    private void parseHeader() throws ProtocolException {
+    protected void parseHeader() throws ProtocolException {
         if (headerParsed)
             return;
 
@@ -183,12 +186,13 @@ public class Block extends Message {
         time = readUint32();
         difficultyTarget = readUint32();
         nonce = readUint32();
+        hash = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(payload, offset, cursor - offset));
 
         headerParsed = true;
         headerBytesValid = parseRetain;
     }
 
-    private void parseTransactions() throws ProtocolException {
+    protected void parseTransactions() throws ProtocolException {
         if (transactionsParsed)
             return;
 
@@ -385,8 +389,8 @@ public class Block extends Message {
         // fall back to manual write
         maybeParseHeader();
         Utils.uint32ToByteStreamLE(version, stream);
-        stream.write(Utils.reverseBytes(prevBlockHash.getBytes()));
-        stream.write(Utils.reverseBytes(getMerkleRoot().getBytes()));
+        stream.write(prevBlockHash.getReversedBytes());
+        stream.write(getMerkleRoot().getReversedBytes());
         Utils.uint32ToByteStreamLE(time, stream);
         Utils.uint32ToByteStreamLE(difficultyTarget, stream);
         Utils.uint32ToByteStreamLE(nonce, stream);
@@ -395,9 +399,8 @@ public class Block extends Message {
     private void writeTransactions(OutputStream stream) throws IOException {
         // check for no transaction conditions first
         // must be a more efficient way to do this but I'm tired atm.
-        if (transactions == null && transactionsParsed) {
+        if (transactions == null && transactionsParsed)
             return;
-        }
 
         // confirmed we must have transactions either cached or as objects.
         if (transactionBytesValid && payload != null && payload.length >= offset + length) {
@@ -518,7 +521,7 @@ public class Block extends Message {
         try {
             ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
             writeHeader(bos);
-            return new Sha256Hash(Utils.reverseBytes(doubleDigest(bos.toByteArray())));
+            return Sha256Hash.wrapReversed(Sha256Hash.hashTwice(bos.toByteArray()));
         } catch (IOException e) {
             throw new RuntimeException(e); // Cannot happen.
         }
@@ -548,7 +551,7 @@ public class Block extends Message {
      * The number that is one greater than the largest representable SHA-256
      * hash.
      */
-    static private BigInteger LARGEST_HASH = BigInteger.ONE.shiftLeft(256);
+    private static BigInteger LARGEST_HASH = BigInteger.ONE.shiftLeft(256);
 
     /**
      * Returns the work represented by this block.<p>
@@ -567,15 +570,20 @@ public class Block extends Message {
     public Block cloneAsHeader() {
         maybeParseHeader();
         Block block = new Block(params);
+        copyBitcoinHeaderTo(block);
+        return block;
+    }
+
+    /** Copy the block without transactions into the provided empty block. */
+    protected final void copyBitcoinHeaderTo(final Block block) {
         block.nonce = nonce;
-        block.prevBlockHash = prevBlockHash.duplicate();
-        block.merkleRoot = getMerkleRoot().duplicate();
+        block.prevBlockHash = prevBlockHash;
+        block.merkleRoot = getMerkleRoot();
         block.version = version;
         block.time = time;
         block.difficultyTarget = difficultyTarget;
         block.transactions = null;
-        block.hash = getHash().duplicate();
-        return block;
+        block.hash = getHash();
     }
 
     /**
@@ -584,55 +592,23 @@ public class Block extends Message {
      */
     @Override
     public String toString() {
-        StringBuilder s = new StringBuilder("v");
-        s.append(version);
+        StringBuilder s = new StringBuilder();
         s.append(" block: \n");
-        s.append("   previous block: ");
-        s.append(getPrevBlockHash());
-        s.append("\n");
-        s.append("   merkle root: ");
-        s.append(getMerkleRoot());
-        s.append("\n");
-        s.append("   time: [");
-        s.append(time);
-        s.append("] ");
-        s.append(new Date(time * 1000));
-        s.append("\n");
-        s.append("   difficulty target (nBits): ");
-        s.append(difficultyTarget);
-        s.append("\n");
-        s.append("   nonce: ");
-        s.append(nonce);
-        s.append("\n");
+        s.append("   hash: ").append(getHashAsString()).append('\n');
+        s.append("   version: ").append(version);
+        s.append('\n');
+        s.append("   previous block: ").append(getPrevBlockHash()).append("\n");
+        s.append("   merkle root: ").append(getMerkleRoot()).append("\n");
+        s.append("   time: ").append(time).append(" (").append(Utils.dateTimeFormat(time * 1000)).append(")\n");
+        s.append("   difficulty target (nBits): ").append(difficultyTarget).append("\n");
+        s.append("   nonce: ").append(nonce).append("\n");
         if (transactions != null && transactions.size() > 0) {
             s.append("   with ").append(transactions.size()).append(" transaction(s):\n");
             for (Transaction tx : transactions) {
-                s.append(tx.toString());
+                s.append(tx);
             }
         }
         return s.toString();
-    }
-
-    /**
-     * <p>Finds a value of nonce that makes the blocks hash lower than the difficulty target. This is called mining, but
-     * solve() is far too slow to do real mining with. It exists only for unit testing purposes.
-     *
-     * <p>This can loop forever if a solution cannot be found solely by incrementing nonce. It doesn't change
-     * extraNonce.</p>
-     */
-    public void solve() {
-        maybeParseHeader();
-        while (true) {
-            try {
-                // Is our proof of work valid yet?
-                if (checkProofOfWork(false))
-                    return;
-                // No, so increment the nonce and try again.
-                setNonce(getNonce() + 1);
-            } catch (VerificationException e) {
-                throw new RuntimeException(e); // Cannot happen.
-            }
-        }
     }
 
     /**
@@ -659,7 +635,7 @@ public class Block extends Message {
         // Allow injection of a fake clock to allow unit testing.
         long currentTime = Utils.currentTimeSeconds();
         if (time > currentTime + ALLOWED_TIME_DRIFT)
-            throw new VerificationException(String.format("Block too far in future: %d vs %d", time, currentTime + ALLOWED_TIME_DRIFT));
+            throw new VerificationException(String.format(Locale.US, "Block too far in future: %d vs %d", time, currentTime + ALLOWED_TIME_DRIFT));
     }
 
     private void checkSigOps() throws VerificationException {
@@ -683,7 +659,7 @@ public class Block extends Message {
 
     private Sha256Hash calculateMerkleRoot() {
         List<byte[]> tree = buildMerkleTree();
-        return new Sha256Hash(tree.get(tree.size() - 1));
+        return Sha256Hash.wrap(tree.get(tree.size() - 1));
     }
 
     private List<byte[]> buildMerkleTree() {
@@ -733,7 +709,7 @@ public class Block extends Message {
                 int right = Math.min(left + 1, levelSize - 1);
                 byte[] leftBytes = Utils.reverseBytes(tree.get(levelOffset + left));
                 byte[] rightBytes = Utils.reverseBytes(tree.get(levelOffset + right));
-                tree.add(Utils.reverseBytes(doubleDigestTwoBuffers(leftBytes, 0, 32, rightBytes, 0, 32)));
+                tree.add(Utils.reverseBytes(hashTwice(leftBytes, 0, 32, rightBytes, 0, 32)));
             }
             // Move to the next level.
             levelOffset += levelSize;
@@ -934,19 +910,21 @@ public class Block extends Message {
         this.hash = null;
     }
 
-    /** Returns an immutable list of transactions held in this block. */
+    /** Returns an immutable list of transactions held in this block, or null if this object represents just a header. */
+    @Nullable
     public List<Transaction> getTransactions() {
        maybeParseTransactions();
-       return ImmutableList.copyOf(transactions);
+        return transactions == null ? null : ImmutableList.copyOf(transactions);
     }
 
     // ///////////////////////////////////////////////////////////////////////////////////////////////
     // Unit testing related methods.
 
     // Used to make transactions unique.
-    static private int txCounter;
+    private static int txCounter;
 
     /** Adds a coinbase transaction to the block. This exists for unit tests. */
+    @VisibleForTesting
     void addCoinbaseTransaction(byte[] pubKeyTo, Coin value) {
         unCacheTransactions();
         transactions = new ArrayList<Transaction>();
@@ -956,9 +934,10 @@ public class Block extends Message {
         //
         // Here we will do things a bit differently so a new address isn't needed every time. We'll put a simple
         // counter in the scriptSig so every transaction has a different hash.
-        coinbase.addInput(new TransactionInput(params, coinbase, new byte[]{(byte) txCounter, (byte) (txCounter++ >> 8)}));
+        coinbase.addInput(new TransactionInput(params, coinbase,
+                new ScriptBuilder().data(new byte[]{(byte) txCounter, (byte) (txCounter++ >> 8)}).build().getProgram()));
         coinbase.addOutput(new TransactionOutput(params, coinbase, value,
-                ScriptBuilder.createOutputScript(new ECKey(null, pubKeyTo)).getProgram()));
+                ScriptBuilder.createOutputScript(ECKey.fromPublicOnly(pubKeyTo)).getProgram()));
         transactions.add(coinbase);
         coinbase.setParent(this);
         coinbase.length = coinbase.nubitsSerialize().length;
@@ -975,7 +954,7 @@ public class Block extends Message {
      */
     @VisibleForTesting
     public Block createNextBlock(Address to, long time) {
-        return createNextBlock(to, null, time, pubkeyForTesting, Coin.valueOf(50, 0));
+        return createNextBlock(to, null, time, pubkeyForTesting, FIFTY_COINS);
     }
 
     /**
@@ -991,7 +970,7 @@ public class Block extends Message {
         if (to != null) {
             // Add a transaction paying 50 coins to the "to" address.
             Transaction t = new Transaction(params);
-            t.addOutput(new TransactionOutput(params, t, Coin.valueOf(50, 0), to));
+            t.addOutput(new TransactionOutput(params, t, FIFTY_COINS, to));
             // The input does not really need to be a valid signature, as long as it has the right general form.
             TransactionInput input;
             if (prevOut == null) {
@@ -1001,7 +980,7 @@ public class Block extends Message {
                 byte[] counter = new byte[32];
                 counter[0] = (byte) txCounter;
                 counter[1] = (byte) (txCounter++ >> 8);
-                input.getOutpoint().setHash(new Sha256Hash(counter));
+                input.getOutpoint().setHash(Sha256Hash.wrap(counter));
             } else {
                 input = new TransactionInput(params, t, Script.createInputScript(EMPTY_BYTES, EMPTY_BYTES), prevOut);
             }
@@ -1015,7 +994,6 @@ public class Block extends Message {
             b.setTime(getTimeSeconds() + 1);
         else
             b.setTime(time);
-        b.solve();
         try {
             b.verifyHeader();
         } catch (VerificationException e) {
@@ -1026,17 +1004,17 @@ public class Block extends Message {
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to, TransactionOutPoint prevOut) {
-        return createNextBlock(to, prevOut, Utils.currentTimeMillis() / 1000, pubkeyForTesting, Coin.valueOf(50, 0));
+        return createNextBlock(to, prevOut, getTimeSeconds() + 5, pubkeyForTesting, FIFTY_COINS);
     }
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to, Coin value) {
-        return createNextBlock(to, null, Utils.currentTimeMillis() / 1000, pubkeyForTesting, value);
+        return createNextBlock(to, null, getTimeSeconds() + 5, pubkeyForTesting, value);
     }
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to) {
-        return createNextBlock(to, Coin.valueOf(50, 0));
+        return createNextBlock(to, FIFTY_COINS);
     }
 
     @VisibleForTesting
@@ -1045,12 +1023,12 @@ public class Block extends Message {
     }
 
     /**
-     * Create a block sending 50lat as a coinbase transaction to the public key specified.
+     * Create a block sending 50NBT as a coinbase transaction to the public key specified.
      * This method is intended for test use only.
      */
     @VisibleForTesting
     Block createNextBlockWithCoinbase(byte[] pubKey) {
-        return createNextBlock(null, null, Utils.currentTimeSeconds(), pubKey, Coin.valueOf(50, 0));
+        return createNextBlock(null, null, Utils.currentTimeSeconds(), pubKey, FIFTY_COINS);
     }
 
     @VisibleForTesting

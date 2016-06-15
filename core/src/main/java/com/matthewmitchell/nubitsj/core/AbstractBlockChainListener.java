@@ -27,6 +27,10 @@ public class AbstractBlockChainListener implements BlockChainListener {
     }
 
     @Override
+    public void notifyHashDownload(boolean isDownloading) {
+    }
+
+    @Override
     public void reorganize(StoredBlock splitPoint, List<StoredBlock> oldBlocks, List<StoredBlock> newBlocks) throws VerificationException {
     }
 

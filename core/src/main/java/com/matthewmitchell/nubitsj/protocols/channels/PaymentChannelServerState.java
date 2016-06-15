@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.Locale;
 
 import static com.google.common.base.Preconditions.*;
 
@@ -234,9 +235,10 @@ public class PaymentChannelServerState {
             throw e;
         }
         log.info("Broadcasting multisig contract: {}", multisigContract);
+        wallet.addWatchedScripts(ImmutableList.of(multisigContract.getOutput(0).getScriptPubKey()));
         state = State.WAITING_FOR_MULTISIG_ACCEPTANCE;
         final SettableFuture<PaymentChannelServerState> future = SettableFuture.create();
-        Futures.addCallback(broadcaster.broadcastTransaction(multisigContract), new FutureCallback<Transaction>() {
+        Futures.addCallback(broadcaster.broadcastTransaction(multisigContract).future(), new FutureCallback<Transaction>() {
             @Override public void onSuccess(Transaction transaction) {
                 log.info("Successfully broadcast multisig contract {}. Channel now open.", transaction.getHashAsString());
                 try {
@@ -399,7 +401,7 @@ public class PaymentChannelServerState {
             feePaidForPayment = req.tx.getFee();
             log.info("Calculated fee is {}", feePaidForPayment);
             if (feePaidForPayment.compareTo(bestValueToMe) >= 0) {
-                final String msg = String.format("Had to pay more in fees (%s) than the channel was worth (%s)",
+                final String msg = String.format(Locale.US, "Had to pay more in fees (%s) than the channel was worth (%s)",
                         feePaidForPayment, bestValueToMe);
                 throw new InsufficientMoneyException(feePaidForPayment.subtract(bestValueToMe), msg);
             }
@@ -418,7 +420,7 @@ public class PaymentChannelServerState {
         state = State.CLOSING;
         log.info("Closing channel, broadcasting tx {}", tx);
         // The act of broadcasting the transaction will add it to the wallet.
-        ListenableFuture<Transaction> future = broadcaster.broadcastTransaction(tx);
+        ListenableFuture<Transaction> future = broadcaster.broadcastTransaction(tx).future();
         Futures.addCallback(future, new FutureCallback<Transaction>() {
             @Override public void onSuccess(Transaction transaction) {
                 log.info("TX {} propagated, channel successfully closed.", transaction.getHash());
@@ -473,7 +475,7 @@ public class PaymentChannelServerState {
             storedServerChannel.updateValueToMe(bestValueToMe, bestValueSignature);
             StoredPaymentChannelServerStates channels = (StoredPaymentChannelServerStates)
                     wallet.getExtensions().get(StoredPaymentChannelServerStates.EXTENSION_ID);
-            wallet.addOrUpdateExtension(channels);
+            channels.updatedChannel(storedServerChannel);
         }
     }
 
@@ -500,6 +502,5 @@ public class PaymentChannelServerState {
         if (connectedHandler != null)
             checkState(storedServerChannel.setConnectedHandler(connectedHandler, false) == connectedHandler);
         channels.putChannel(storedServerChannel);
-        wallet.addOrUpdateExtension(channels);
     }
 }

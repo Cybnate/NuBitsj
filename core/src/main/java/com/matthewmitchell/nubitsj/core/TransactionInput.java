@@ -1,5 +1,6 @@
 /**
  * Copyright 2011 Google Inc.
+ * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +22,7 @@ import com.matthewmitchell.nubitsj.wallet.DefaultRiskAnalysis;
 import com.matthewmitchell.nubitsj.wallet.KeyBag;
 import com.matthewmitchell.nubitsj.wallet.RedeemData;
 
+import com.google.common.base.Joiner;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -40,13 +42,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * to the outputs of another. The exceptions are coinbase transactions, which create new coins.
  */
 public class TransactionInput extends ChildMessage implements Serializable {
+    /** Magic sequence number that indicates there is no sequence number. */
     public static final long NO_SEQUENCE = 0xFFFFFFFFL;
     private static final long serialVersionUID = 2;
     public static final byte[] EMPTY_ARRAY = new byte[0];
+    // Magic outpoint index that indicates the input is in fact unconnected.
+    private static final long UNCONNECTED = 0xFFFFFFFFL;
 
-    // Allows for altering transactions after they were broadcast. Tx replacement is currently disabled in the C++
-    // client so this is always the UINT_MAX.
-    // TODO: Document this in more detail and build features that use it.
+    // Allows for altering transactions after they were broadcast. Values below NO_SEQUENCE-1 mean it can be altered.
     private long sequence;
     // Data needed to connect to the output of the transaction we're gathering coins from.
     private TransactionOutPoint outpoint;
@@ -56,16 +59,16 @@ public class TransactionInput extends ChildMessage implements Serializable {
     private byte[] scriptBytes;
     // The Script object obtained from parsing scriptBytes. Only filled in on demand and if the transaction is not
     // coinbase.
-    transient private WeakReference<Script> scriptSig;
+    private transient WeakReference<Script> scriptSig;
     /** Value of the output connected to the input, if known. This field does not participate in equals()/hashCode(). */
     @Nullable
-    private final Coin value;
+    private Coin value;
 
     /**
      * Creates an input that connects to nothing - used only in creation of coinbase transactions.
      */
     public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes) {
-        this(params, parentTransaction, scriptBytes, new TransactionOutPoint(params, NO_SEQUENCE, (Transaction) null));
+        this(params, parentTransaction, scriptBytes, new TransactionOutPoint(params, UNCONNECTED, (Transaction) null));
     }
 
     public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes,
@@ -90,7 +93,11 @@ public class TransactionInput extends ChildMessage implements Serializable {
     TransactionInput(NetworkParameters params, Transaction parentTransaction, TransactionOutput output) {
         super(params);
         long outputIndex = output.getIndex();
-        outpoint = new TransactionOutPoint(params, outputIndex, output.getParentTransaction());
+        if(output.getParentTransaction() != null ) {
+            outpoint = new TransactionOutPoint(params, outputIndex, output.getParentTransaction());
+        } else {
+            outpoint = new TransactionOutPoint(params, output);
+        }
         scriptBytes = EMPTY_ARRAY;
         sequence = NO_SEQUENCE;
         setParent(parentTransaction);
@@ -172,7 +179,6 @@ public class TransactionInput extends ChildMessage implements Serializable {
             maybeParse();
             script = new Script(scriptBytes);
             scriptSig = new WeakReference<Script>(script);
-            return script;
         }
         return script;
     }
@@ -202,8 +208,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
      * Sequence numbers allow participants in a multi-party transaction signing protocol to create new versions of the
      * transaction independently of each other. Newer versions of a transaction can replace an existing version that's
      * in nodes memory pools if the existing version is time locked. See the Contracts page on the Nubits wiki for
-     * examples of how you can use this feature to build contract protocols. Note that as of 2012 the tx replacement
-     * feature is disabled so sequence numbers are unusable.
+     * examples of how you can use this feature to build contract protocols.
      */
     public long getSequenceNumber() {
         maybeParse();
@@ -214,8 +219,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
      * Sequence numbers allow participants in a multi-party transaction signing protocol to create new versions of the
      * transaction independently of each other. Newer versions of a transaction can replace an existing version that's
      * in nodes memory pools if the existing version is time locked. See the Contracts page on the Nubits wiki for
-     * examples of how you can use this feature to build contract protocols. Note that as of 2012 the tx replacement
-     * feature is disabled so sequence numbers are unusable.
+     * examples of how you can use this feature to build contract protocols.
      */
     public void setSequenceNumber(long sequence) {
         unCache();
@@ -268,20 +272,6 @@ public class TransactionInput extends ChildMessage implements Serializable {
     @Nullable
     public Coin getValue() {
         return value;
-    }
-
-    /**
-     * Returns a human readable debug string.
-     */
-    @Override
-    public String toString() {
-        if (isCoinBase())
-            return "TxIn: COINBASE";
-        try {
-            return "TxIn for [" + outpoint + "]: " + getScriptSig();
-        } catch (ScriptException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     public enum ConnectionResult {
@@ -369,6 +359,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
     public void connect(TransactionOutput out) {
         outpoint.fromTx = out.getParentTransaction();
         out.markAsSpent(this);
+        value = out.getValue();
     }
 
     /**
@@ -490,5 +481,23 @@ public class TransactionInput extends ChildMessage implements Serializable {
         return result;
     }
 
+    /**
+     * Returns a human readable debug string.
+     */
+    @Override
+    public String toString() {
+        StringBuilder s = new StringBuilder("TxIn");
+        try {
+            if (isCoinBase()) {
+                s.append(": COINBASE");
+            } else {
+                s.append(" for [").append(outpoint).append("]: ").append(getScriptSig());
+                if (hasSequence())
+                    s.append(" (has sequence)");
+            }
+            return s.toString();
+        } catch (ScriptException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
-

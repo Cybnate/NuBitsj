@@ -159,6 +159,8 @@ public class ValidHashStore {
     
     private HttpURLConnection getConnection(final URL url, String contentType) throws ProtocolException, IOException {
         
+        // NOTE: Running a debugger with a HttpURLConnection causes the connection to get corrupted!
+        
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setUseCaches(false);
         connection.setInstanceFollowRedirects(false);
@@ -166,7 +168,9 @@ public class ValidHashStore {
         connection.setReadTimeout(30000);
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", contentType);
-        connection.setRequestProperty("Accept-Encoding", ""); 
+        connection.setRequestProperty("Accept-Encoding", "");
+        // Give fake user agent to keep Cloudfare and the like happy.
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11");
         connection.setDoOutput(true);
         
         return connection;
@@ -187,7 +191,9 @@ public class ValidHashStore {
 
             try {
 
-                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                int respCode = connection.getResponseCode();
+
+                if (respCode == HttpURLConnection.HTTP_OK) {
 
                     is = new BufferedInputStream(connection.getInputStream());
 
@@ -210,7 +216,8 @@ public class ValidHashStore {
                     
                     return null;
 
-                }
+                } else
+                    log.warn("Unexpected response code {}", respCode);
 
             } finally {
                 if (is != null)
@@ -242,7 +249,9 @@ public class ValidHashStore {
             
             try {
 
-                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                int respCode = connection.getResponseCode();
+
+                if (respCode == HttpURLConnection.HTTP_OK) {
                     
                     is = connection.getInputStream();
 
@@ -256,8 +265,9 @@ public class ValidHashStore {
                     
                     return Coin.parseCoin(content.toString());
                     
-                }
-                
+                } else
+                    log.warn("Unexpected response code {}", respCode);
+
             } finally {
                 if (is != null)
                     is.close();
@@ -302,7 +312,7 @@ public class ValidHashStore {
 
             if (mark)
                 servers.markSuccess(true);
-            
+
             return ret;
 
         }
@@ -366,9 +376,9 @@ public class ValidHashStore {
         // Now download hashes from server.
 
         // But if waitForServer is true, first wait a while in case the server hasn't received or processed this block yet.
-        // We assume the server is well connected and 30 seconds would therefore be more than enough in most cases.
+        // We assume the server is well connected and 10 seconds would therefore be more than enough in most cases.
         if (waitForServer)
-            Utils.sleep(30000);
+            Utils.sleep(10000);
         
         final int locSize = offset;
         

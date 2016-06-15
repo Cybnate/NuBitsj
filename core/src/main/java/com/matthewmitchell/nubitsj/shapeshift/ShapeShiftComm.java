@@ -23,7 +23,6 @@ import com.matthewmitchell.nubitsj.core.Coin;
 import com.matthewmitchell.nubitsj.params.MainNetParams;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.slf4j.LoggerFactory;
 
 /**
  * Implements {@link com.matthewmitchell.nubitsj.shapeshift.ShapeShiftInterface}
@@ -61,7 +60,7 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 		JSONObject jsonRequest = new JSONObject();
 		
 		try {
-			jsonRequest.put("pair", "nbt_" + destCoin.coinCode);
+			jsonRequest.put("pair", "nbt_" + destCoin.getCoinCode());
 			jsonRequest.put("amount", amount.toPlainString());
 			jsonRequest.put("withdrawal", destAddr.toString());
 			jsonRequest.put("returnAddress", refund.toString());
@@ -83,7 +82,7 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 					jsonResult = jsonResult.getJSONObject("success");
 					Address deposit = new Address(MainNetParams.get(), jsonResult.getString("deposit"));
 					Coin amount = Coin.parseCoin(jsonResult.getString("depositAmount"));
-					ShapeShiftMonetary foreignRate = destCoin.format.parseShapeShiftCoin(jsonResult.getString("quotedRate"), destCoin.exponent);
+					ShapeShiftMonetary foreignRate = destCoin.getMonetaryFormat().parseShapeShiftCoin(jsonResult.getString("quotedRate"), destCoin.getExponent());
 					Coin rate = foreignRate.toCoinRate();
 					long expiry = jsonResult.getLong("expiration");
 					
@@ -132,7 +131,7 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 		JSONObject jsonRequest = new JSONObject();
 		
 		try {
-			jsonRequest.put("pair", "nbt_" + destCoin.coinCode);
+			jsonRequest.put("pair", "nbt_" + destCoin.getCoinCode());
 			jsonRequest.put("withdrawal", destAddr.toString());
 			jsonRequest.put("returnAddress", refund.toString());
 		} catch (JSONException ex) {
@@ -167,7 +166,7 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 
 	@Override
 	public void limit(ShapeShiftCoin destCoin) {
-		client.get(API_URL + "limit/nbt_" + destCoin.coinCode, new ResponseCallback() {
+		client.get(API_URL + "limit/nbt_" + destCoin.getCoinCode(), new ResponseCallback() {
 
 			@Override
 			public void onSuccess(String response) {
@@ -196,7 +195,7 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 
 	@Override
 	public void rate(ShapeShiftCoin destCoin) {
-		client.get(API_URL + "rate/" + destCoin.coinCode + "_nbt", new ResponseCallback() {
+		client.get(API_URL + "rate/" + destCoin.getCoinCode() + "_nbt", new ResponseCallback() {
 
 			@Override
 			public void onSuccess(String response) {
@@ -222,7 +221,7 @@ public class ShapeShiftComm extends ShapeShiftInterface {
 	
 	@Override
 	public void marketInfo(final ShapeShiftCoin destCoin) {
-		client.get(API_URL + "marketinfo/nbt_" + destCoin.coinCode, new ResponseCallback() {
+		client.get(API_URL + "marketinfo/nbt_" + destCoin.getCoinCode(), new ResponseCallback() {
 
 			@Override
 			public void onSuccess(String response) {

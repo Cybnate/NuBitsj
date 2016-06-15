@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -180,6 +181,15 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
     }
 
     /**
+     * Notifies the set of stored states that a channel has been updated. Use to notify the wallet of an update to this
+     * wallet extension.
+     */
+    void updatedChannel(final StoredClientChannel channel) {
+        log.info("Stored client channel {} was updated", channel.hashCode());
+        containingWallet.addOrUpdateExtension(this);
+    }
+
+    /**
      * Adds the given channel to this set of stored states, broadcasting the contract and refund transactions when the
      * channel expires and notifies the wallet of an update to this wallet extension
      */
@@ -206,7 +216,7 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
             lock.unlock();
         }
         if (updateWallet)
-            containingWallet.addOrUpdateExtension(this);
+            updatedChannel(channel);
     }
 
     /**
@@ -242,7 +252,7 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
         } finally {
             lock.unlock();
         }
-        containingWallet.addOrUpdateExtension(this);
+        updatedChannel(channel);
     }
 
     @Override
@@ -262,15 +272,16 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
             ClientState.StoredClientPaymentChannels.Builder builder = ClientState.StoredClientPaymentChannels.newBuilder();
             for (StoredClientChannel channel : mapChannels.values()) {
                 // First a few asserts to make sure things won't break
-                checkState(channel.valueToMe.signum() >= 0 && channel.valueToMe.compareTo(NetworkParameters.MAX_MONEY) < 0);
-                checkState(channel.refundFees.signum() >= 0 && channel.refundFees.compareTo(NetworkParameters.MAX_MONEY) < 0);
-                checkNotNull(channel.myKey.getPrivKeyBytes());
+                checkState(channel.valueToMe.signum() >= 0 && channel.valueToMe.compareTo(NetworkParameters.MAX_MONEY) <= 0);
+                checkState(channel.refundFees.signum() >= 0 && channel.refundFees.compareTo(NetworkParameters.MAX_MONEY) <= 0);
+                checkNotNull(channel.myKey.getPubKey());
                 checkState(channel.refund.getConfidence().getSource() == TransactionConfidence.Source.SELF);
                 final ClientState.StoredClientPaymentChannel.Builder value = ClientState.StoredClientPaymentChannel.newBuilder()
                         .setId(ByteString.copyFrom(channel.id.getBytes()))
                         .setContractTransaction(ByteString.copyFrom(channel.contract.nubitsSerialize()))
                         .setRefundTransaction(ByteString.copyFrom(channel.refund.nubitsSerialize()))
-                        .setMyKey(ByteString.copyFrom(channel.myKey.getPrivKeyBytes()))
+                        .setMyKey(ByteString.copyFrom(new byte[0])) // Not  used, but protobuf message requires
+                        .setMyPublicKey(ByteString.copyFrom(channel.myKey.getPubKey()))
                         .setValueToMe(channel.valueToMe.value)
                         .setRefundFees(channel.refundFees.value);
                 if (channel.close != null)
@@ -294,14 +305,17 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
             for (ClientState.StoredClientPaymentChannel storedState : states.getChannelsList()) {
                 Transaction refundTransaction = new Transaction(params, storedState.getRefundTransaction().toByteArray());
                 refundTransaction.getConfidence().setSource(TransactionConfidence.Source.SELF);
-                StoredClientChannel channel = new StoredClientChannel(new Sha256Hash(storedState.getId().toByteArray()),
+                ECKey myKey = (storedState.getMyKey().isEmpty()) ?
+                        containingWallet.findKeyFromPubKey(storedState.getMyPublicKey().toByteArray()) :
+                        ECKey.fromPrivate(storedState.getMyKey().toByteArray());
+                StoredClientChannel channel = new StoredClientChannel(Sha256Hash.wrap(storedState.getId().toByteArray()),
                         new Transaction(params, storedState.getContractTransaction().toByteArray()),
                         refundTransaction,
-                        ECKey.fromPrivate(storedState.getMyKey().toByteArray()),
+                        myKey,
                         Coin.valueOf(storedState.getValueToMe()),
                         Coin.valueOf(storedState.getRefundFees()), false);
                 if (storedState.hasCloseTransactionHash()) {
-                    Sha256Hash closeTxHash = new Sha256Hash(storedState.getCloseTransactionHash().toByteArray());
+                    Sha256Hash closeTxHash = Sha256Hash.wrap(storedState.getCloseTransactionHash().toByteArray());
                     channel.close = containingWallet.getTransaction(closeTxHash);
                 }
                 putChannel(channel, false);
@@ -358,9 +372,9 @@ class StoredClientChannel {
 
     @Override
     public String toString() {
-        final String newline = String.format("%n");
+        final String newline = String.format(Locale.US, "%n");
         final String closeStr = close == null ? "still open" : close.toString().replaceAll(newline, newline + "   ");
-        return String.format("Stored client channel for server ID %s (%s)%n" +
+        return String.format(Locale.US, "Stored client channel for server ID %s (%s)%n" +
                 "    Key:         %s%n" +
                 "    Value left:  %s%n" +
                 "    Refund fees: %s%n" +

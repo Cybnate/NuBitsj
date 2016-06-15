@@ -736,11 +736,28 @@ public final class ClientState {
     com.google.protobuf.ByteString getRefundTransaction();
 
     /**
+     * <code>required bytes myPublicKey = 8;</code>
+     */
+    boolean hasMyPublicKey();
+    /**
+     * <code>required bytes myPublicKey = 8;</code>
+     */
+    com.google.protobuf.ByteString getMyPublicKey();
+
+    /**
      * <code>required bytes myKey = 4;</code>
+     *
+     * <pre>
+     * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+     * </pre>
      */
     boolean hasMyKey();
     /**
      * <code>required bytes myKey = 4;</code>
+     *
+     * <pre>
+     * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+     * </pre>
      */
     com.google.protobuf.ByteString getMyKey();
 
@@ -856,23 +873,28 @@ public final class ClientState {
               break;
             }
             case 34: {
-              bitField0_ |= 0x00000008;
+              bitField0_ |= 0x00000010;
               myKey_ = input.readBytes();
               break;
             }
             case 40: {
-              bitField0_ |= 0x00000010;
+              bitField0_ |= 0x00000020;
               valueToMe_ = input.readUInt64();
               break;
             }
             case 48: {
-              bitField0_ |= 0x00000020;
+              bitField0_ |= 0x00000040;
               refundFees_ = input.readUInt64();
               break;
             }
             case 58: {
-              bitField0_ |= 0x00000040;
+              bitField0_ |= 0x00000080;
               closeTransactionHash_ = input.readBytes();
+              break;
+            }
+            case 66: {
+              bitField0_ |= 0x00000008;
+              myPublicKey_ = input.readBytes();
               break;
             }
           }
@@ -960,16 +982,39 @@ public final class ClientState {
       return refundTransaction_;
     }
 
+    public static final int MYPUBLICKEY_FIELD_NUMBER = 8;
+    private com.google.protobuf.ByteString myPublicKey_;
+    /**
+     * <code>required bytes myPublicKey = 8;</code>
+     */
+    public boolean hasMyPublicKey() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>required bytes myPublicKey = 8;</code>
+     */
+    public com.google.protobuf.ByteString getMyPublicKey() {
+      return myPublicKey_;
+    }
+
     public static final int MYKEY_FIELD_NUMBER = 4;
     private com.google.protobuf.ByteString myKey_;
     /**
      * <code>required bytes myKey = 4;</code>
+     *
+     * <pre>
+     * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+     * </pre>
      */
     public boolean hasMyKey() {
-      return ((bitField0_ & 0x00000008) == 0x00000008);
+      return ((bitField0_ & 0x00000010) == 0x00000010);
     }
     /**
      * <code>required bytes myKey = 4;</code>
+     *
+     * <pre>
+     * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+     * </pre>
      */
     public com.google.protobuf.ByteString getMyKey() {
       return myKey_;
@@ -981,7 +1026,7 @@ public final class ClientState {
      * <code>required uint64 valueToMe = 5;</code>
      */
     public boolean hasValueToMe() {
-      return ((bitField0_ & 0x00000010) == 0x00000010);
+      return ((bitField0_ & 0x00000020) == 0x00000020);
     }
     /**
      * <code>required uint64 valueToMe = 5;</code>
@@ -996,7 +1041,7 @@ public final class ClientState {
      * <code>required uint64 refundFees = 6;</code>
      */
     public boolean hasRefundFees() {
-      return ((bitField0_ & 0x00000020) == 0x00000020);
+      return ((bitField0_ & 0x00000040) == 0x00000040);
     }
     /**
      * <code>required uint64 refundFees = 6;</code>
@@ -1017,7 +1062,7 @@ public final class ClientState {
      * </pre>
      */
     public boolean hasCloseTransactionHash() {
-      return ((bitField0_ & 0x00000040) == 0x00000040);
+      return ((bitField0_ & 0x00000080) == 0x00000080);
     }
     /**
      * <code>optional bytes closeTransactionHash = 7;</code>
@@ -1036,6 +1081,7 @@ public final class ClientState {
       id_ = com.google.protobuf.ByteString.EMPTY;
       contractTransaction_ = com.google.protobuf.ByteString.EMPTY;
       refundTransaction_ = com.google.protobuf.ByteString.EMPTY;
+      myPublicKey_ = com.google.protobuf.ByteString.EMPTY;
       myKey_ = com.google.protobuf.ByteString.EMPTY;
       valueToMe_ = 0L;
       refundFees_ = 0L;
@@ -1056,6 +1102,10 @@ public final class ClientState {
         return false;
       }
       if (!hasRefundTransaction()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasMyPublicKey()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -1087,17 +1137,20 @@ public final class ClientState {
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         output.writeBytes(3, refundTransaction_);
       }
-      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
         output.writeBytes(4, myKey_);
       }
-      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
         output.writeUInt64(5, valueToMe_);
       }
-      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
         output.writeUInt64(6, refundFees_);
       }
-      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
         output.writeBytes(7, closeTransactionHash_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeBytes(8, myPublicKey_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -1120,21 +1173,25 @@ public final class ClientState {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(3, refundTransaction_);
       }
-      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(4, myKey_);
       }
-      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
         size += com.google.protobuf.CodedOutputStream
           .computeUInt64Size(5, valueToMe_);
       }
-      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
         size += com.google.protobuf.CodedOutputStream
           .computeUInt64Size(6, refundFees_);
       }
-      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(7, closeTransactionHash_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(8, myPublicKey_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -1264,14 +1321,16 @@ public final class ClientState {
         bitField0_ = (bitField0_ & ~0x00000002);
         refundTransaction_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000004);
-        myKey_ = com.google.protobuf.ByteString.EMPTY;
+        myPublicKey_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000008);
-        valueToMe_ = 0L;
+        myKey_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000010);
-        refundFees_ = 0L;
+        valueToMe_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000020);
-        closeTransactionHash_ = com.google.protobuf.ByteString.EMPTY;
+        refundFees_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000040);
+        closeTransactionHash_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000080);
         return this;
       }
 
@@ -1315,17 +1374,21 @@ public final class ClientState {
         if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
           to_bitField0_ |= 0x00000008;
         }
-        result.myKey_ = myKey_;
+        result.myPublicKey_ = myPublicKey_;
         if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
           to_bitField0_ |= 0x00000010;
         }
-        result.valueToMe_ = valueToMe_;
+        result.myKey_ = myKey_;
         if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
           to_bitField0_ |= 0x00000020;
         }
-        result.refundFees_ = refundFees_;
+        result.valueToMe_ = valueToMe_;
         if (((from_bitField0_ & 0x00000040) == 0x00000040)) {
           to_bitField0_ |= 0x00000040;
+        }
+        result.refundFees_ = refundFees_;
+        if (((from_bitField0_ & 0x00000080) == 0x00000080)) {
+          to_bitField0_ |= 0x00000080;
         }
         result.closeTransactionHash_ = closeTransactionHash_;
         result.bitField0_ = to_bitField0_;
@@ -1353,6 +1416,9 @@ public final class ClientState {
         if (other.hasRefundTransaction()) {
           setRefundTransaction(other.getRefundTransaction());
         }
+        if (other.hasMyPublicKey()) {
+          setMyPublicKey(other.getMyPublicKey());
+        }
         if (other.hasMyKey()) {
           setMyKey(other.getMyKey());
         }
@@ -1379,6 +1445,10 @@ public final class ClientState {
           return false;
         }
         if (!hasRefundTransaction()) {
+          
+          return false;
+        }
+        if (!hasMyPublicKey()) {
           
           return false;
         }
@@ -1521,36 +1591,87 @@ public final class ClientState {
         return this;
       }
 
-      private com.google.protobuf.ByteString myKey_ = com.google.protobuf.ByteString.EMPTY;
+      private com.google.protobuf.ByteString myPublicKey_ = com.google.protobuf.ByteString.EMPTY;
       /**
-       * <code>required bytes myKey = 4;</code>
+       * <code>required bytes myPublicKey = 8;</code>
        */
-      public boolean hasMyKey() {
+      public boolean hasMyPublicKey() {
         return ((bitField0_ & 0x00000008) == 0x00000008);
       }
       /**
+       * <code>required bytes myPublicKey = 8;</code>
+       */
+      public com.google.protobuf.ByteString getMyPublicKey() {
+        return myPublicKey_;
+      }
+      /**
+       * <code>required bytes myPublicKey = 8;</code>
+       */
+      public Builder setMyPublicKey(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000008;
+        myPublicKey_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes myPublicKey = 8;</code>
+       */
+      public Builder clearMyPublicKey() {
+        bitField0_ = (bitField0_ & ~0x00000008);
+        myPublicKey_ = getDefaultInstance().getMyPublicKey();
+        onChanged();
+        return this;
+      }
+
+      private com.google.protobuf.ByteString myKey_ = com.google.protobuf.ByteString.EMPTY;
+      /**
        * <code>required bytes myKey = 4;</code>
+       *
+       * <pre>
+       * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+       * </pre>
+       */
+      public boolean hasMyKey() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>required bytes myKey = 4;</code>
+       *
+       * <pre>
+       * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+       * </pre>
        */
       public com.google.protobuf.ByteString getMyKey() {
         return myKey_;
       }
       /**
        * <code>required bytes myKey = 4;</code>
+       *
+       * <pre>
+       * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+       * </pre>
        */
       public Builder setMyKey(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00000008;
+  bitField0_ |= 0x00000010;
         myKey_ = value;
         onChanged();
         return this;
       }
       /**
        * <code>required bytes myKey = 4;</code>
+       *
+       * <pre>
+       * Deprecated, key is already stored in the wallet, and found using myPublicKey;
+       * </pre>
        */
       public Builder clearMyKey() {
-        bitField0_ = (bitField0_ & ~0x00000008);
+        bitField0_ = (bitField0_ & ~0x00000010);
         myKey_ = getDefaultInstance().getMyKey();
         onChanged();
         return this;
@@ -1561,7 +1682,7 @@ public final class ClientState {
        * <code>required uint64 valueToMe = 5;</code>
        */
       public boolean hasValueToMe() {
-        return ((bitField0_ & 0x00000010) == 0x00000010);
+        return ((bitField0_ & 0x00000020) == 0x00000020);
       }
       /**
        * <code>required uint64 valueToMe = 5;</code>
@@ -1573,7 +1694,7 @@ public final class ClientState {
        * <code>required uint64 valueToMe = 5;</code>
        */
       public Builder setValueToMe(long value) {
-        bitField0_ |= 0x00000010;
+        bitField0_ |= 0x00000020;
         valueToMe_ = value;
         onChanged();
         return this;
@@ -1582,7 +1703,7 @@ public final class ClientState {
        * <code>required uint64 valueToMe = 5;</code>
        */
       public Builder clearValueToMe() {
-        bitField0_ = (bitField0_ & ~0x00000010);
+        bitField0_ = (bitField0_ & ~0x00000020);
         valueToMe_ = 0L;
         onChanged();
         return this;
@@ -1593,7 +1714,7 @@ public final class ClientState {
        * <code>required uint64 refundFees = 6;</code>
        */
       public boolean hasRefundFees() {
-        return ((bitField0_ & 0x00000020) == 0x00000020);
+        return ((bitField0_ & 0x00000040) == 0x00000040);
       }
       /**
        * <code>required uint64 refundFees = 6;</code>
@@ -1605,7 +1726,7 @@ public final class ClientState {
        * <code>required uint64 refundFees = 6;</code>
        */
       public Builder setRefundFees(long value) {
-        bitField0_ |= 0x00000020;
+        bitField0_ |= 0x00000040;
         refundFees_ = value;
         onChanged();
         return this;
@@ -1614,7 +1735,7 @@ public final class ClientState {
        * <code>required uint64 refundFees = 6;</code>
        */
       public Builder clearRefundFees() {
-        bitField0_ = (bitField0_ & ~0x00000020);
+        bitField0_ = (bitField0_ & ~0x00000040);
         refundFees_ = 0L;
         onChanged();
         return this;
@@ -1631,7 +1752,7 @@ public final class ClientState {
        * </pre>
        */
       public boolean hasCloseTransactionHash() {
-        return ((bitField0_ & 0x00000040) == 0x00000040);
+        return ((bitField0_ & 0x00000080) == 0x00000080);
       }
       /**
        * <code>optional bytes closeTransactionHash = 7;</code>
@@ -1658,7 +1779,7 @@ public final class ClientState {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00000040;
+  bitField0_ |= 0x00000080;
         closeTransactionHash_ = value;
         onChanged();
         return this;
@@ -1673,7 +1794,7 @@ public final class ClientState {
        * </pre>
        */
       public Builder clearCloseTransactionHash() {
-        bitField0_ = (bitField0_ & ~0x00000040);
+        bitField0_ = (bitField0_ & ~0x00000080);
         closeTransactionHash_ = getDefaultInstance().getCloseTransactionHash();
         onChanged();
         return this;
@@ -1712,13 +1833,14 @@ public final class ClientState {
       "\n storedclientpaymentchannel.proto\022\017paym" +
       "entchannels\"\\\n\033StoredClientPaymentChanne" +
       "ls\022=\n\010channels\030\001 \003(\0132+.paymentchannels.S" +
-      "toredClientPaymentChannel\"\264\001\n\032StoredClie" +
+      "toredClientPaymentChannel\"\311\001\n\032StoredClie" +
       "ntPaymentChannel\022\n\n\002id\030\001 \002(\014\022\033\n\023contract" +
       "Transaction\030\002 \002(\014\022\031\n\021refundTransaction\030\003" +
-      " \002(\014\022\r\n\005myKey\030\004 \002(\014\022\021\n\tvalueToMe\030\005 \002(\004\022\022" +
-      "\n\nrefundFees\030\006 \002(\004\022\034\n\024closeTransactionHa" +
-      "sh\030\007 \001(\014B=\n.com.matthewmitchell.nubitsj." +
-      "protocols.channelsB\013ClientState"
+      " \002(\014\022\023\n\013myPublicKey\030\010 \002(\014\022\r\n\005myKey\030\004 \002(\014" +
+      "\022\021\n\tvalueToMe\030\005 \002(\004\022\022\n\nrefundFees\030\006 \002(\004\022" +
+      "\034\n\024closeTransactionHash\030\007 \001(\014B=\n.com.mat" +
+      "thewmitchell.nubitsj.protocols.channelsB",
+      "\013ClientState"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -1743,7 +1865,7 @@ public final class ClientState {
     internal_static_paymentchannels_StoredClientPaymentChannel_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_paymentchannels_StoredClientPaymentChannel_descriptor,
-        new java.lang.String[] { "Id", "ContractTransaction", "RefundTransaction", "MyKey", "ValueToMe", "RefundFees", "CloseTransactionHash", });
+        new java.lang.String[] { "Id", "ContractTransaction", "RefundTransaction", "MyPublicKey", "MyKey", "ValueToMe", "RefundFees", "CloseTransactionHash", });
   }
 
   // @@protoc_insertion_point(outer_class_scope)

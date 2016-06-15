@@ -16,12 +16,15 @@
 
 package com.matthewmitchell.nubitsj.crypto;
 
+import java.util.Locale;
+
+import com.google.common.primitives.Ints;
 /**
  * <p>This is just a wrapper for the i (child number) as per BIP 32 with a boolean getter for the most significant bit
- * and a getter for the actual 0-based child number. A {@link List} of these forms a <i>path</i> through a
+ * and a getter for the actual 0-based child number. A {@link java.util.List} of these forms a <i>path</i> through a
  * {@link DeterministicHierarchy}. This class is immutable.
  */
-public class ChildNumber {
+public class ChildNumber implements Comparable<ChildNumber> {
     /**
      * The bit that's set in the child number to indicate whether this key is "hardened". Given a hardened key, it is
      * not possible to derive a child public key if you know only the hardened public key. With a non-hardened key this
@@ -71,7 +74,7 @@ public class ChildNumber {
 
     @Override
     public String toString() {
-        return String.format("%d%s", num(), isHardened() ? "H" : "");
+        return String.format(Locale.US, "%d%s", num(), isHardened() ? "H" : "");
     }
 
     @Override
@@ -85,5 +88,10 @@ public class ChildNumber {
     @Override
     public int hashCode() {
         return i;
+    }
+
+    @Override
+    public int compareTo(ChildNumber other) {
+        return Ints.compare(this.num(), other.num());
     }
 }

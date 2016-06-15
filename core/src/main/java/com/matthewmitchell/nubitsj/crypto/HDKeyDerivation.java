@@ -16,27 +16,33 @@
 
 package com.matthewmitchell.nubitsj.crypto;
 
-import com.matthewmitchell.nubitsj.core.ECKey;
-import com.matthewmitchell.nubitsj.core.Utils;
-import com.google.common.collect.ImmutableList;
-import org.spongycastle.crypto.macs.HMac;
-import org.spongycastle.math.ec.ECPoint;
+import com.google.common.collect.*;
+import com.matthewmitchell.nubitsj.core.*;
+import org.spongycastle.math.ec.*;
 
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.security.SecureRandom;
-import java.util.Arrays;
+import java.math.*;
+import java.nio.*;
+import java.security.*;
+import java.util.*;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.base.Preconditions.*;
 
 /**
  * Implementation of the <a href="https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki">BIP 32</a>
  * deterministic wallet child key generation algorithm.
  */
 public final class HDKeyDerivation {
+
+    static {
+        // Init proper random number generator, as some old Android installations have bugs that make it unsecure.
+        if (Utils.isAndroidRuntime())
+            new LinuxSecureRandom();
+
+        RAND_INT = new BigInteger(256, new SecureRandom());
+    }
+
     // Some arbitrary random number. Doesn't matter what it is.
-    private static final BigInteger RAND_INT = new BigInteger(256, new SecureRandom());
+    private static final BigInteger RAND_INT;
 
     private HDKeyDerivation() { }
 
@@ -45,8 +51,6 @@ public final class HDKeyDerivation {
      * This is the maximum number of re-attempts (to avoid an infinite loop in case of bugs etc.).
      */
     public static final int MAX_CHILD_DERIVATION_ATTEMPTS = 100;
-
-    public static final HMac MASTER_HMAC_SHA512 = HDUtils.createHmacSha512Digest("Bitcoin seed".getBytes());
 
     /**
      * Generates a new deterministic key from the given seed, which can be any arbitrary byte array. However resist
@@ -60,7 +64,7 @@ public final class HDKeyDerivation {
     public static DeterministicKey createMasterPrivateKey(byte[] seed) throws HDDerivationException {
         checkArgument(seed.length > 8, "Seed is too short and could be brute forced");
         // Calculate I = HMAC-SHA512(key="Bitcoin seed", msg=S)
-        byte[] i = HDUtils.hmacSha512(MASTER_HMAC_SHA512, seed);
+        byte[] i = HDUtils.hmacSha512(HDUtils.createHmacSha512Digest("Bitcoin seed".getBytes()), seed);
         // Split I into two 32-byte sequences, Il and Ir.
         // Use Il as master secret key, and Ir as master chain code.
         checkState(i.length == 64, i.length);
@@ -86,7 +90,7 @@ public final class HDKeyDerivation {
     }
 
     public static DeterministicKey createMasterPubKeyFromBytes(byte[] pubKeyBytes, byte[] chainCode) {
-        return new DeterministicKey(ImmutableList.<ChildNumber>of(), chainCode, ECKey.CURVE.getCurve().decodePoint(pubKeyBytes), null, null);
+        return new DeterministicKey(ImmutableList.<ChildNumber>of(), chainCode, new LazyECPoint(ECKey.CURVE.getCurve(), pubKeyBytes), null, null);
     }
 
     /**
@@ -125,12 +129,12 @@ public final class HDKeyDerivation {
      * if the resulting derived key is invalid (eg. private key == 0).
      */
     public static DeterministicKey deriveChildKey(DeterministicKey parent, ChildNumber childNumber) throws HDDerivationException {
-        if (parent.isPubKeyOnly()) {
+        if (!parent.hasPrivKey()) {
             RawKeyBytes rawKey = deriveChildKeyBytesFromPublic(parent, childNumber, PublicDeriveMode.NORMAL);
             return new DeterministicKey(
                     HDUtils.append(parent.getPath(), childNumber),
                     rawKey.chainCode,
-                    ECKey.CURVE.getCurve().decodePoint(rawKey.keyBytes),   // c'tor will compress
+                    new LazyECPoint(ECKey.CURVE.getCurve(), rawKey.keyBytes),
                     null,
                     parent);
         } else {
@@ -146,7 +150,7 @@ public final class HDKeyDerivation {
     public static RawKeyBytes deriveChildKeyBytesFromPrivate(DeterministicKey parent,
                                                               ChildNumber childNumber) throws HDDerivationException {
         checkArgument(parent.hasPrivKey(), "Parent key must have private key bytes for this method.");
-        byte[] parentPublicKey = ECKey.compressPoint(parent.getPubKeyPoint()).getEncoded();
+        byte[] parentPublicKey = parent.getPubKeyPoint().getEncoded(true);
         assert parentPublicKey.length == 33 : parentPublicKey.length;
         ByteBuffer data = ByteBuffer.allocate(37);
         if (childNumber.isHardened()) {
@@ -174,7 +178,7 @@ public final class HDKeyDerivation {
 
     public static RawKeyBytes deriveChildKeyBytesFromPublic(DeterministicKey parent, ChildNumber childNumber, PublicDeriveMode mode) throws HDDerivationException {
         checkArgument(!childNumber.isHardened(), "Can't use private derivation with public keys only.");
-        byte[] parentPublicKey = ECKey.compressPoint(parent.getPubKeyPoint()).getEncoded();
+        byte[] parentPublicKey = parent.getPubKeyPoint().getEncoded(true);
         assert parentPublicKey.length == 33 : parentPublicKey.length;
         ByteBuffer data = ByteBuffer.allocate(37);
         data.put(parentPublicKey);
@@ -186,21 +190,20 @@ public final class HDKeyDerivation {
         BigInteger ilInt = new BigInteger(1, il);
         assertLessThanN(ilInt, "Illegal derived key: I_L >= n");
 
-        final ECPoint G = ECKey.CURVE.getG();
         final BigInteger N = ECKey.CURVE.getN();
         ECPoint Ki;
         switch (mode) {
             case NORMAL:
-                Ki = G.multiply(ilInt).add(parent.getPubKeyPoint());
+                Ki = ECKey.publicPointFromPrivate(ilInt).add(parent.getPubKeyPoint());
                 break;
             case WITH_INVERSION:
                 // This trick comes from Gregory Maxwell. Check the homomorphic properties of our curve hold. The
                 // below calculations should be redundant and give the same result as NORMAL but if the precalculated
                 // tables have taken a bit flip will yield a different answer. This mode is used when vending a key
                 // to perform a last-ditch sanity check trying to catch bad RAM.
-                Ki = G.multiply(ilInt.add(RAND_INT));
+                Ki = ECKey.publicPointFromPrivate(ilInt.add(RAND_INT).mod(N));
                 BigInteger additiveInverse = RAND_INT.negate().mod(N);
-                Ki = Ki.add(G.multiply(additiveInverse));
+                Ki = Ki.add(ECKey.publicPointFromPrivate(additiveInverse));
                 Ki = Ki.add(parent.getPubKeyPoint());
                 break;
             default: throw new AssertionError();

@@ -31,5 +31,9 @@ public class UnknownMessage extends EmptyMessage {
         return "Unknown message [" + name + "]: " + (payload == null ? "" : Utils.HEX.encode(payload));
     }
 
+    public String getName() {
+        return name;
+    }
+
 }
 

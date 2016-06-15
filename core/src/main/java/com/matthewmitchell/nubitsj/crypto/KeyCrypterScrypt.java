@@ -19,6 +19,7 @@ package com.matthewmitchell.nubitsj.crypto;
 import com.google.common.base.Objects;
 import com.google.protobuf.ByteString;
 import com.lambdaworks.crypto.SCrypt;
+import com.matthewmitchell.nubitsj.core.Utils;
 import com.matthewmitchell.nubitsj.wallet.Protos;
 import com.matthewmitchell.nubitsj.wallet.Protos.ScryptParameters;
 import com.matthewmitchell.nubitsj.wallet.Protos.Wallet.EncryptionType;
@@ -71,9 +72,18 @@ public class KeyCrypterScrypt implements KeyCrypter, Serializable {
      */
     public static final int SALT_LENGTH = 8;
 
-    private static final transient SecureRandom secureRandom = new SecureRandom();
+    static {
+        // Init proper random number generator, as some old Android installations have bugs that make it unsecure.
+        if (Utils.isAndroidRuntime())
+            new LinuxSecureRandom();
 
-    private static byte[] randomSalt() {
+        secureRandom = new SecureRandom();
+    }
+
+    private static final transient SecureRandom secureRandom;
+
+    /** Returns SALT_LENGTH (8) bytes of random data */
+    public static byte[] randomSalt() {
         byte[] salt = new byte[SALT_LENGTH];
         secureRandom.nextBytes(salt);
         return salt;
@@ -187,24 +197,24 @@ public class KeyCrypterScrypt implements KeyCrypter, Serializable {
     /**
      * Decrypt bytes previously encrypted with this class.
      *
-     * @param privateKeyToDecode    The private key to decrypt
+     * @param dataToDecrypt    The data to decrypt
      * @param aesKey           The AES key to use for decryption
      * @return                 The decrypted bytes
-     * @throws                 KeyCrypterException if bytes could not be decoded to a valid key
+     * @throws                 KeyCrypterException if bytes could not be decrypted
      */
     @Override
-    public byte[] decrypt(EncryptedData privateKeyToDecode, KeyParameter aesKey) throws KeyCrypterException {
-        checkNotNull(privateKeyToDecode);
+    public byte[] decrypt(EncryptedData dataToDecrypt, KeyParameter aesKey) throws KeyCrypterException {
+        checkNotNull(dataToDecrypt);
         checkNotNull(aesKey);
 
         try {
-            ParametersWithIV keyWithIv = new ParametersWithIV(new KeyParameter(aesKey.getKey()), privateKeyToDecode.initialisationVector);
+            ParametersWithIV keyWithIv = new ParametersWithIV(new KeyParameter(aesKey.getKey()), dataToDecrypt.initialisationVector);
 
             // Decrypt the message.
             BufferedBlockCipher cipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESFastEngine()));
             cipher.init(false, keyWithIv);
 
-            byte[] cipherBytes = privateKeyToDecode.encryptedBytes;
+            byte[] cipherBytes = dataToDecrypt.encryptedBytes;
             byte[] decryptedBytes = new byte[cipher.getOutputSize(cipherBytes.length)];
             final int length1 = cipher.processBytes(cipherBytes, 0, cipherBytes.length, decryptedBytes, 0);
             final int length2 = cipher.doFinal(decryptedBytes, length1);

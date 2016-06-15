@@ -27,6 +27,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotSame;
 
 public class BIP38PrivateKeyTest {
 
@@ -57,5 +58,24 @@ public class BIP38PrivateKeyTest {
         encryptedKey.decrypt("BAD");
     }
 
+    @Test
+    public void testJavaSerialization() throws Exception {
+        BIP38PrivateKey mainKey = new BIP38PrivateKey(MAINNET,
+                "6PRJ89RjK3SmsGbFgMC3N9BoyHhEMsCSprV3HPKJWUyT7spHFGawZ7XxB1");
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        new ObjectOutputStream(os).writeObject(mainKey);
+        BIP38PrivateKey mainKeyCopy = (BIP38PrivateKey) new ObjectInputStream(
+                new ByteArrayInputStream(os.toByteArray())).readObject();
+        assertEquals(mainKey, mainKeyCopy);
 }
 
+    @Test
+    public void cloning() throws Exception {
+        BIP38PrivateKey a = new BIP38PrivateKey(MAINNET, "6PRJ89RjK3SmsGbFgMC3N9BoyHhEMsCSprV3HPKJWUyT7spHFGawZ7XxB1");
+        // TODO: Consider overriding clone() in BIP38PrivateKey to narrow the type
+        BIP38PrivateKey b = (BIP38PrivateKey) a.clone();
+
+        assertEquals(a, b);
+        assertNotSame(a, b);
+    }
+}

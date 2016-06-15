@@ -32,6 +32,9 @@ public class NativeBlockChainListener implements BlockChainListener {
     public native void notifyNewBestBlock(StoredBlock block) throws VerificationException;
 
     @Override
+    public native void notifyHashDownload(boolean isDownloading);
+
+    @Override
     public native void reorganize(StoredBlock splitPoint, List<StoredBlock> oldBlocks, List<StoredBlock> newBlocks) throws VerificationException;
 
     @Override
